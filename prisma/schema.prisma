@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -23,6 +18,7 @@ model Broadcaster {
 
 model LeagueBroadcasterMapping {
   id            Int         @id @default(autoincrement())
+  sport         String
   leagueId      Int
   leagueName    String
   countryCode   String
@@ -31,6 +27,6 @@ model LeagueBroadcasterMapping {
   broadcasterId Int
   createdAt     DateTime    @default(now())
 
-  @@unique([leagueId, countryCode])
-  @@index([countryCode])
+  @@unique([sport, leagueId, countryCode])
+  @@index([sport, countryCode])
 }
