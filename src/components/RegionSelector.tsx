@@ -3,20 +3,20 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-const REGIONS: { code: string; label: string; flag: string }[] = [
-  { code: "US", label: "United States", flag: "🇺🇸" },
-  { code: "GB", label: "United Kingdom", flag: "🇬🇧" },
-  { code: "KE", label: "Kenya", flag: "🇰🇪" },
-  { code: "NG", label: "Nigeria", flag: "🇳🇬" },
-  { code: "ZA", label: "South Africa", flag: "🇿🇦" },
-  { code: "DE", label: "Germany", flag: "🇩🇪" },
-  { code: "FR", label: "France", flag: "🇫🇷" },
-  { code: "ES", label: "Spain", flag: "🇪🇸" },
-  { code: "IT", label: "Italy", flag: "🇮🇹" },
-  { code: "BR", label: "Brazil", flag: "🇧🇷" },
-  { code: "IN", label: "India", flag: "🇮🇳" },
-  { code: "JP", label: "Japan", flag: "🇯🇵" },
-  { code: "AU", label: "Australia", flag: "🇦🇺" },
+const REGIONS = [
+  { code: "US", label: "United States" },
+  { code: "GB", label: "United Kingdom" },
+  { code: "KE", label: "Kenya" },
+  { code: "NG", label: "Nigeria" },
+  { code: "ZA", label: "South Africa" },
+  { code: "DE", label: "Germany" },
+  { code: "FR", label: "France" },
+  { code: "ES", label: "Spain" },
+  { code: "IT", label: "Italy" },
+  { code: "BR", label: "Brazil" },
+  { code: "IN", label: "India" },
+  { code: "JP", label: "Japan" },
+  { code: "AU", label: "Australia" },
 ];
 
 export default function RegionSelector({ current }: { current: string }) {
@@ -32,7 +32,7 @@ export default function RegionSelector({ current }: { current: string }) {
   return (
     <div className="flex items-center gap-2 mb-6">
       <label htmlFor="region" className="text-sm font-medium text-gray-700">
-        Region:
+        Broadcasters for:
       </label>
       <select
         id="region"
@@ -42,7 +42,7 @@ export default function RegionSelector({ current }: { current: string }) {
       >
         {REGIONS.map((r) => (
           <option key={r.code} value={r.code}>
-            {r.flag} {r.label}
+            {r.code} - {r.label}
           </option>
         ))}
       </select>
