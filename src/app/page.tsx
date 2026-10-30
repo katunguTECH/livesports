@@ -1,9 +1,10 @@
 // src/app/page.tsx
 import { headers } from "next/headers";
 import { Suspense } from "react";
-import { getFixturesForSport } from "@/lib/api";
+import { getFixturesForSport, getGolfTournaments } from "@/lib/api";
 import { getBroadcastersForFixture } from "@/lib/broadcaster-matcher";
 import EventCard from "@/components/EventCard";
+import TournamentCard from "@/components/TournamentCard";
 import RegionSelector from "@/components/RegionSelector";
 import SportTabs from "@/components/SportTabs";
 import type { SportKey } from "@/lib/leagues";
@@ -16,10 +17,20 @@ const VALID_SPORTS: SportKey[] = [
   "football",
   "baseball",
   "hockey",
+  "tennis",
+  "mma",
+  "golf",
+  "rugby",
 ];
 
 type FixtureWithBroadcasters = Awaited<
   ReturnType<typeof getFixturesForSport>
+>[number] & {
+  broadcasters: Awaited<ReturnType<typeof getBroadcastersForFixture>>;
+};
+
+type GolfWithBroadcasters = Awaited<
+  ReturnType<typeof getGolfTournaments>
 >[number] & {
   broadcasters: Awaited<ReturnType<typeof getBroadcastersForFixture>>;
 };
@@ -38,8 +49,107 @@ export default async function HomePage({
     ? (params.sport as SportKey)
     : "soccer";
 
-  let fixturesWithBroadcasters: FixtureWithBroadcasters[] = [];
   let dataError: string | null = null;
+
+  if (sport === "golf") {
+    let tournaments: GolfWithBroadcasters[] = [];
+    let total = 0;
+    try {
+      const list = await getGolfTournaments();
+      total = list.length;
+      tournaments = await Promise.all(
+        list.map(async (t) => {
+          try {
+            const broadcasters = await getBroadcastersForFixture(
+              {
+                id: t.id,
+                sport: "golf",
+                leagueId: t.leagueId,
+              } as any,
+              countryCode
+            );
+            return { ...t, broadcasters };
+          } catch {
+            return { ...t, broadcasters: [] };
+          }
+        })
+      );
+    } catch (err) {
+      dataError = err instanceof Error ? err.message : "Unknown error";
+    }
+
+    const live = tournaments.filter((t) => t.status === "live");
+    const scheduled = tournaments.filter((t) => t.status === "scheduled");
+    const finished = tournaments.filter((t) => t.status === "finished");
+
+    return (
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-2">Live and Upcoming Sport</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          Detected region: <span className="font-semibold">{detectedCountry}</span>
+          {" - "}Broadcasters shown for:{" "}
+          <span className="font-semibold">{countryCode}</span>
+        </p>
+
+        <SportTabs active={sport} region={countryCode} />
+
+        <Suspense fallback={<div className="mb-6 text-sm text-gray-400">Loading...</div>}>
+          <RegionSelector current={countryCode} />
+        </Suspense>
+
+        {dataError && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+            <strong>Data temporarily unavailable.</strong> {dataError}
+          </div>
+        )}
+
+        <p className="text-xs text-gray-400 mb-6">
+          Tournaments today: {total} - Live: {live.length} - Upcoming:{" "}
+          {scheduled.length} - Finished: {finished.length}
+        </p>
+
+        {live.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              Live Now ({live.length})
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {live.map((t) => (
+                <TournamentCard key={t.id} tournament={t} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-4">Upcoming ({scheduled.length})</h2>
+          {scheduled.length === 0 ? (
+            <p className="text-gray-500">No upcoming tournaments for this sport today.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {scheduled.map((t) => (
+                <TournamentCard key={t.id} tournament={t} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {finished.length > 0 && (
+          <section>
+            <h2 className="text-xl font-semibold mb-4">Results ({finished.length})</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {finished.map((t) => (
+                <TournamentCard key={t.id} tournament={t} />
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+    );
+  }
+
+  let fixturesWithBroadcasters: FixtureWithBroadcasters[] = [];
   let totalFetched = 0;
 
   try {
@@ -65,19 +175,14 @@ export default async function HomePage({
   }
 
   const live = fixturesWithBroadcasters.filter((f) => f.status === "live");
-  const scheduled = fixturesWithBroadcasters.filter(
-    (f) => f.status === "scheduled"
-  );
-  const finished = fixturesWithBroadcasters.filter(
-    (f) => f.status === "finished"
-  );
+  const scheduled = fixturesWithBroadcasters.filter((f) => f.status === "scheduled");
+  const finished = fixturesWithBroadcasters.filter((f) => f.status === "finished");
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-2">Live and Upcoming Sport</h1>
       <p className="text-sm text-gray-500 mb-4">
-        Detected region:{" "}
-        <span className="font-semibold">{detectedCountry}</span>
+        Detected region: <span className="font-semibold">{detectedCountry}</span>
         {" - "}Broadcasters shown for:{" "}
         <span className="font-semibold">{countryCode}</span>
       </p>
@@ -87,9 +192,7 @@ export default async function HomePage({
       <Suspense
         fallback={
           <div className="flex items-center gap-2 mb-6">
-            <span className="text-sm font-medium text-gray-700">
-              Broadcasters for:
-            </span>
+            <span className="text-sm font-medium text-gray-700">Broadcasters for:</span>
             <span className="border rounded px-3 py-1.5 text-sm bg-white text-gray-400">
               Loading...
             </span>
@@ -125,13 +228,9 @@ export default async function HomePage({
       )}
 
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-4">
-          Upcoming ({scheduled.length})
-        </h2>
+        <h2 className="text-xl font-semibold mb-4">Upcoming ({scheduled.length})</h2>
         {scheduled.length === 0 ? (
-          <p className="text-gray-500">
-            No upcoming fixtures for this sport today.
-          </p>
+          <p className="text-gray-500">No upcoming fixtures for this sport today.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {scheduled.slice(0, 60).map((f) => (
@@ -143,9 +242,7 @@ export default async function HomePage({
 
       {finished.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold mb-4">
-            Results ({finished.length})
-          </h2>
+          <h2 className="text-xl font-semibold mb-4">Results ({finished.length})</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {finished.slice(0, 30).map((f) => (
               <EventCard key={f.id} fixture={f} />

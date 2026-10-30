@@ -16,6 +16,10 @@ const DB_SPORT: Record<string, string> = {
   basketball: "basketball",
   baseball: "baseball",
   hockey: "hockey",
+  tennis: "tennis",
+  mma: "mma",
+  golf: "golf",
+  rugby: "rugby",
 };
 
 function dbSport(espnSport: string): string {

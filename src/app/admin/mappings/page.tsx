@@ -45,6 +45,10 @@ export default async function MappingsPage({
             <option value="american-football">NFL</option>
             <option value="baseball">Baseball</option>
             <option value="hockey">Hockey</option>
+            <option value="tennis">Tennis</option>
+            <option value="mma">MMA</option>
+            <option value="golf">Golf</option>
+            <option value="rugby">Rugby</option>
           </select>
           <input
             name="leagueId"
