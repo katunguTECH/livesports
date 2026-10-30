@@ -7,77 +7,107 @@ type Props = {
 };
 
 export default function TournamentCard({ tournament }: Props) {
-  const { name, leagueName, status, statusDetail, startTime, leaderboard, broadcasters } = tournament;
+  const {
+    name,
+    leagueName,
+    status,
+    statusDetail,
+    startTime,
+    leaderboard,
+    broadcasters,
+  } = tournament;
+
   const isLive = status === "live";
   const isFinished = status === "finished";
 
   return (
-    <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition flex flex-col justify-between">
+    <article className="group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface p-5 transition-all hover:border-border-strong hover:shadow-sm">
       <div>
-        <div className="flex justify-between items-start mb-2 gap-2">
-          <span className="text-xs font-medium text-gray-500 uppercase truncate">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-subtle">
             Golf &middot; {leagueName}
           </span>
           {isLive && (
-            <span className="text-xs font-bold text-white bg-red-600 px-2 py-0.5 rounded whitespace-nowrap">
-              LIVE {statusDetail}
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-live px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              Live
             </span>
           )}
           {isFinished && (
-            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">
+            <span className="whitespace-nowrap rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">
               {statusDetail || "Final"}
             </span>
           )}
         </div>
 
-        <p className="font-semibold text-base mb-2 truncate">{name}</p>
+        <p className="mb-3 truncate text-[15px] font-semibold text-foreground">
+          {name}
+        </p>
 
         {status === "scheduled" && (
-          <p className="text-sm text-gray-600 mb-2">
-            {new Date(startTime).toLocaleString()}
+          <p className="mb-3 text-xs font-medium text-foreground-muted">
+            {new Date(startTime).toLocaleString(undefined, {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </p>
         )}
 
         {leaderboard.length > 0 && (
-          <ol className="text-sm space-y-1">
+          <ol className="space-y-1.5">
             {leaderboard.map((p, i) => (
-              <li key={`${p.name}-${i}`} className="flex justify-between gap-2">
-                <span className="truncate">
-                  <span className="text-gray-400 mr-2">{p.position}</span>
-                  {p.name}
+              <li
+                key={`${p.name}-${i}`}
+                className="flex items-baseline justify-between gap-3 text-xs"
+              >
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="w-4 flex-shrink-0 font-mono text-[10px] font-semibold text-foreground-subtle">
+                    {p.position}
+                  </span>
+                  <span className="truncate font-medium text-foreground">
+                    {p.name}
+                  </span>
                 </span>
-                <span className="font-mono tabular-nums">{p.score}</span>
+                <span className="flex-shrink-0 font-mono text-xs font-semibold tabular-nums text-foreground">
+                  {p.score}
+                </span>
               </li>
             ))}
           </ol>
         )}
       </div>
 
-      <div className="mt-4 pt-3 border-t">
+      <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border pt-4">
         {broadcasters.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+          <>
             {broadcasters.slice(0, 4).map((b, i) => (
               <a
                 key={`${b.countryCode}-${b.name}-${i}`}
                 href={b.affiliateUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100 transition"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground-muted transition-colors hover:border-primary/20 hover:bg-chip hover:text-chip-foreground"
+                title={`${b.name} (${b.countryCode})`}
               >
-                <span className="font-mono text-[10px] opacity-70">{b.countryCode}</span>
+                <span className="font-mono text-[9px] font-bold opacity-70">
+                  {b.countryCode}
+                </span>
                 {b.name}
               </a>
             ))}
             {broadcasters.length > 4 && (
-              <span className="text-xs text-gray-400 self-center">
-                +{broadcasters.length - 4} more
+              <span className="inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium text-foreground-subtle">
+                +{broadcasters.length - 4}
               </span>
             )}
-          </div>
+          </>
         ) : (
-          <p className="text-xs text-gray-400">No broadcaster listed yet.</p>
+          <p className="text-xs text-foreground-subtle">No broadcaster listed</p>
         )}
       </div>
-    </div>
+    </article>
   );
 }

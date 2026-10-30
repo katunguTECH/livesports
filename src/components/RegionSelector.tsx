@@ -30,19 +30,22 @@ export default function RegionSelector({ current }: { current: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2 mb-6">
-      <label htmlFor="region" className="text-sm font-medium text-gray-700">
-        Broadcasters for:
+    <div className="mb-6 flex items-center gap-2.5">
+      <label
+        htmlFor="region"
+        className="text-[11px] font-semibold uppercase tracking-wider text-foreground-subtle"
+      >
+        Broadcasters for
       </label>
       <select
         id="region"
         value={current}
         onChange={(e) => onChange(e.target.value)}
-        className="border rounded px-3 py-1.5 text-sm bg-white"
+        className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       >
         {REGIONS.map((r) => (
           <option key={r.code} value={r.code}>
-            {r.code} - {r.label}
+            {r.label}
           </option>
         ))}
       </select>
