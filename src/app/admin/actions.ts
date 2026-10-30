@@ -45,16 +45,26 @@ export async function deleteBroadcasterAction(formData: FormData) {
 
 export async function addMappingAction(formData: FormData) {
   const prisma = getPrisma();
-  await prisma.leagueBroadcasterMapping.create({
-    data: {
-      sport: formData.get("sport") as string,
-      leagueId: Number(formData.get("leagueId")),
-      leagueName: formData.get("leagueName") as string,
-      countryCode: (formData.get("countryCode") as string).toUpperCase(),
-      broadcasterId: Number(formData.get("broadcasterId")),
-    },
-  });
+  try {
+    await prisma.leagueBroadcasterMapping.create({
+      data: {
+        sport: formData.get("sport") as string,
+        leagueId: Number(formData.get("leagueId")),
+        leagueName: (formData.get("leagueName") as string).trim(),
+        countryCode: (formData.get("countryCode") as string).trim().toUpperCase(),
+        broadcasterId: Number(formData.get("broadcasterId")),
+      },
+    });
+  } catch (err: any) {
+    const msg =
+      err?.code === "P2002"
+        ? "That mapping already exists (same sport, league, and country)."
+        : err?.message ?? "Unknown database error";
+    console.error("addMappingAction failed:", msg);
+    redirect("/admin/mappings?error=" + encodeURIComponent(msg.slice(0, 100)));
+  }
   revalidatePath("/admin/mappings");
+  redirect("/admin/mappings?added=1");
 }
 
 export async function deleteMappingAction(formData: FormData) {

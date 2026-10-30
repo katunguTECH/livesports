@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { addMappingAction, deleteMappingAction } from "../actions";
 
-export default async function MappingsPage() {
+export default async function MappingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; added?: string }>;
+}) {
+  const params = await searchParams;
   const cookieStore = await cookies();
   if (cookieStore.get("admin_auth")?.value !== "true") redirect("/admin/login");
 
@@ -20,6 +25,16 @@ export default async function MappingsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Broadcaster Mappings</h1>
+      {params.error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          {params.error}
+        </div>
+      )}
+      {params.added && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+          Mapping added.
+        </div>
+      )}
 
       <div className="bg-white p-6 rounded-lg shadow-sm border mb-8">
         <h2 className="text-lg font-semibold mb-4">Add Mapping</h2>
