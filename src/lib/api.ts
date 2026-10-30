@@ -9,6 +9,7 @@ export interface Team {
   shortName: string;
   logo: string;
   score: number | null;
+  scoreText?: string;
   winner: boolean;
 }
 
@@ -80,23 +81,45 @@ function mapStatus(state: string): Fixture["status"] {
 
 function pickTeam(competitors: any[], side: "home" | "away"): Team {
   const c = competitors.find((x) => x.homeAway === side) ?? {};
-  const entity = c.team ?? c.athlete ?? c.player ?? {};
-  const scoreNum =
-    c.score === undefined || c.score === null || c.score === ""
-      ? null
-      : Number(c.score);
+
+  // ESPN uses `team` for team sports, `athlete` for tennis/MMA.
+  // An empty `{}` team should NOT win over a real athlete.
+  let entity: any = {};
+  if (c.athlete && (c.athlete.displayName || c.athlete.fullName || c.athlete.shortName)) {
+    entity = c.athlete;
+  } else if (c.team && (c.team.displayName || c.team.name || c.team.shortName)) {
+    entity = c.team;
+  } else if (c.player && (c.player.displayName || c.player.fullName)) {
+    entity = c.player;
+  } else {
+    entity = c.team ?? c.athlete ?? c.player ?? {};
+  }
+
+  const rawScore = c.score;
+  const numericScore =
+    typeof rawScore === "number"
+      ? rawScore
+      : rawScore !== null &&
+        rawScore !== undefined &&
+        rawScore !== "" &&
+        Number.isFinite(Number(rawScore))
+      ? Number(rawScore)
+      : null;
+  const scoreText = typeof rawScore === "string" ? rawScore : undefined;
 
   return {
     id: String(entity.id ?? ""),
-    name: entity.displayName ?? entity.fullName ?? entity.name ?? "TBD",
+    name: entity.displayName ?? entity.fullName ?? entity.name ?? "Unknown",
     shortName:
       entity.shortDisplayName ??
       entity.abbreviation ??
       entity.shortName ??
       entity.name ??
-      "TBD",
+      entity.fullName ??
+      "Unknown",
     logo: entity.logo ?? "",
-    score: Number.isFinite(scoreNum as number) ? (scoreNum as number) : null,
+    score: numericScore,
+    scoreText,
     winner: Boolean(c.winner),
   };
 }

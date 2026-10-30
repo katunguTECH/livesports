@@ -21,6 +21,22 @@ export default function EventCard({ fixture }: Props) {
   const isLive = status === "live";
   const isFinished = status === "finished";
 
+  const renderScore = (team: typeof home) => {
+    if (team.scoreText) {
+      return (
+        <span className="text-xs font-mono text-gray-600 whitespace-nowrap">
+          {team.scoreText}
+        </span>
+      );
+    }
+    if (team.score !== null) {
+      return (
+        <span className="text-xl font-bold tabular-nums">{team.score}</span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition flex flex-col justify-between">
       <div>
@@ -42,19 +58,11 @@ export default function EventCard({ fixture }: Props) {
 
         <div className="flex items-baseline justify-between gap-2">
           <p className="font-semibold text-base truncate">{home.shortName}</p>
-          {(isLive || isFinished) && (
-            <span className="text-xl font-bold tabular-nums">
-              {home.score ?? 0}
-            </span>
-          )}
+          {(isLive || isFinished) && renderScore(home)}
         </div>
         <div className="flex items-baseline justify-between gap-2">
           <p className="font-semibold text-base truncate">{away.shortName}</p>
-          {(isLive || isFinished) && (
-            <span className="text-xl font-bold tabular-nums">
-              {away.score ?? 0}
-            </span>
-          )}
+          {(isLive || isFinished) && renderScore(away)}
         </div>
 
         {status === "scheduled" && (
