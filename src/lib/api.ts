@@ -10,6 +10,7 @@ export interface Team {
   logo: string;
   score: number | null;
   scoreText?: string;
+  linescoreText?: string;
   winner: boolean;
 }
 
@@ -82,19 +83,32 @@ function mapStatus(state: string): Fixture["status"] {
 function pickTeam(competitors: any[], side: "home" | "away"): Team {
   const c = competitors.find((x) => x.homeAway === side) ?? {};
 
-  // ESPN uses `team` for team sports, `athlete` for tennis/MMA.
-  // An empty `{}` team should NOT win over a real athlete.
-  let entity: any = {};
-  if (c.athlete && (c.athlete.displayName || c.athlete.fullName || c.athlete.shortName)) {
-    entity = c.athlete;
-  } else if (c.team && (c.team.displayName || c.team.name || c.team.shortName)) {
-    entity = c.team;
-  } else if (c.player && (c.player.displayName || c.player.fullName)) {
-    entity = c.player;
-  } else {
-    entity = c.team ?? c.athlete ?? c.player ?? {};
-  }
+  // Tennis/MMA: ESPN puts the name on the competitor itself AND on athlete.
+  // Team sports: name is on team. Try in order, skipping empty objects.
+  const athlete = c.athlete ?? {};
+  const team = c.team ?? {};
 
+  const name =
+    c.name ??
+    athlete.displayName ??
+    athlete.fullName ??
+    athlete.shortName ??
+    team.displayName ??
+    team.name ??
+    team.shortName ??
+    "Unknown";
+
+  const shortName =
+    athlete.shortDisplayName ??
+    athlete.abbreviation ??
+    athlete.shortName ??
+    team.shortDisplayName ??
+    team.abbreviation ??
+    team.shortName ??
+    c.name ??
+    "Unknown";
+
+  // Numeric score (team sports)
   const rawScore = c.score;
   const numericScore =
     typeof rawScore === "number"
@@ -107,19 +121,23 @@ function pickTeam(competitors: any[], side: "home" | "away"): Team {
       : null;
   const scoreText = typeof rawScore === "string" ? rawScore : undefined;
 
+  // Tennis set scores: linescores is an array of { value: number }
+  let linescoreText: string | undefined;
+  if (Array.isArray(c.linescores) && c.linescores.length > 0) {
+    const sets = c.linescores
+      .map((ls: any) => ls.value ?? ls.displayValue)
+      .filter((v: any) => v !== undefined && v !== null);
+    if (sets.length > 0) linescoreText = sets.join(" ");
+  }
+
   return {
-    id: String(entity.id ?? ""),
-    name: entity.displayName ?? entity.fullName ?? entity.name ?? "Unknown",
-    shortName:
-      entity.shortDisplayName ??
-      entity.abbreviation ??
-      entity.shortName ??
-      entity.name ??
-      entity.fullName ??
-      "Unknown",
-    logo: entity.logo ?? "",
+    id: String(athlete.id ?? team.id ?? c.id ?? ""),
+    name,
+    shortName,
+    logo: athlete.logo ?? team.logo ?? "",
     score: numericScore,
     scoreText,
+    linescoreText,
     winner: Boolean(c.winner),
   };
 }
@@ -140,10 +158,14 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 
   const data = await res.json();
   const events: any[] = data.events ?? [];
+  const fixtures: Fixture[] = [];
 
-  return events.map((ev) => {
-    const comp = ev.competitions?.[0] ?? {};
-    const competitors = comp.competitors ?? [];
+  for (const ev of events) {
+    // Tennis nests competitions inside groupings. Standard sports use ev.competitions.
+    const competitions: any[] = ev.groupings
+      ? ev.groupings.flatMap((g: any) => g.competitions ?? [])
+      : ev.competitions ?? [];
+
     const statusType = ev.status?.type ?? {};
     const detail =
       statusType.shortDetail ??
@@ -152,29 +174,39 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
       statusType.description ??
       "";
 
-    const broadcasts: BroadcasterHint[] = (comp.broadcasts ?? []).map(
-      (b: any) => ({
-        name: b.media?.shortName ?? b.media?.name ?? "",
-        market: b.market?.type ?? "",
-      })
-    );
+    for (const comp of competitions) {
+      const competitors = comp.competitors ?? [];
+      if (competitors.length === 0) continue;
 
-    return {
-      id: `${cfg.sport}:${cfg.slug}:${ev.id}`,
-      eventId: String(ev.id),
-      sport: cfg.sport,
-      sportLabel: SPORT_LABELS[cfg.sport],
-      leagueId: cfg.leagueId,
-      leagueName: cfg.name,
-      leagueSlug: cfg.slug,
-      startTime: ev.date,
-      status: mapStatus(statusType.state),
-      statusDetail: detail,
-      home: pickTeam(competitors, "home"),
-      away: pickTeam(competitors, "away"),
-      espnBroadcasts: broadcasts,
-    } as Fixture;
-  });
+      const compBroadcasts: BroadcasterHint[] = (comp.broadcasts ?? []).map(
+        (b: any) => ({
+          name: b.media?.shortName ?? b.media?.name ?? "",
+          market: b.market?.type ?? "",
+        })
+      );
+
+      // Use competition date if available, otherwise event date
+      const startTime = comp.date ?? ev.date;
+
+      fixtures.push({
+        id: `${cfg.sport}:${cfg.slug}:${ev.id}:${comp.id ?? ""}`,
+        eventId: String(ev.id),
+        sport: cfg.sport,
+        sportLabel: SPORT_LABELS[cfg.sport],
+        leagueId: cfg.leagueId,
+        leagueName: cfg.name,
+        leagueSlug: cfg.slug,
+        startTime,
+        status: mapStatus(statusType.state),
+        statusDetail: detail,
+        home: pickTeam(competitors, "home"),
+        away: pickTeam(competitors, "away"),
+        espnBroadcasts: compBroadcasts,
+      });
+    }
+  }
+
+  return fixtures;
 }
 
 export async function getFixturesForSport(sport: SportKey): Promise<Fixture[]> {

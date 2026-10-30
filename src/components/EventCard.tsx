@@ -22,6 +22,13 @@ export default function EventCard({ fixture }: Props) {
   const isFinished = status === "finished";
 
   const renderScore = (team: typeof home) => {
+    if (team.linescoreText) {
+      return (
+        <span className="text-xs font-mono text-gray-700 whitespace-nowrap">
+          {team.linescoreText}
+        </span>
+      );
+    }
     if (team.scoreText) {
       return (
         <span className="text-xs font-mono text-gray-600 whitespace-nowrap">
