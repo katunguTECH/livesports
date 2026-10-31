@@ -165,7 +165,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 60 }, // 60s, not 300 â€” live games should appear fast
+    next: { revalidate: 60 }, // 60s, not 300 Ã¢â‚¬â€ live games should appear fast
     signal: AbortSignal.timeout(15000),
   });
 
@@ -220,12 +220,27 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 }
 
 function isDisplayable(f: Fixture): boolean {
-  if (f.home.name === "Unknown" && f.away.name === "Unknown") return false;
-  if (f.home.name === "TBD" && f.away.name === "TBD") return false;
+  const now = Date.now();
+  const startMs = new Date(f.startTime).getTime();
+  const ageMs = now - startMs;
+  const futureMs = startMs - now;
+
+  const bothJunk =
+    (f.home.name === "Unknown" && f.away.name === "Unknown") ||
+    (f.home.name === "TBD" && f.away.name === "TBD");
+  const anyJunk =
+    f.home.name === "Unknown" ||
+    f.away.name === "Unknown" ||
+    f.home.name === "TBD" ||
+    f.away.name === "TBD";
+
+  if (bothJunk) return false;
+
   if (f.status === "scheduled") {
-    const age = Date.now() - new Date(f.startTime).getTime();
-    if (age > 24 * 60 * 60 * 1000) return false;
+    if (ageMs > 24 * 60 * 60 * 1000) return false;
+    if (futureMs > 24 * 60 * 60 * 1000 && anyJunk) return false;
   }
+
   return true;
 }
 

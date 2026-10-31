@@ -66,9 +66,7 @@ function Hero({
         locks.
       </p>
       <p className="mt-3 text-[11px] font-medium text-foreground-subtle">
-        Detected: <span className="text-foreground-muted">{detectedCountry}</span>
-        {" Ã‚Â· "}Showing broadcasters for:{" "}
-        <span className="text-foreground-muted">{showingCountry}</span>
+        Detected: <span className="text-foreground-muted">{detectedCountry}</span> &middot; Showing broadcasters for: <span className="text-foreground-muted">{showingCountry}</span>
       </p>
     </section>
   );
