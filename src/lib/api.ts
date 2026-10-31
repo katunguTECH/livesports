@@ -165,7 +165,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 60 }, // 60s, not 300 — live games should appear fast
+    next: { revalidate: 60 }, // 60s, not 300 â€” live games should appear fast
     signal: AbortSignal.timeout(15000),
   });
 
@@ -219,6 +219,16 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
   return fixtures;
 }
 
+function isDisplayable(f: Fixture): boolean {
+  if (f.home.name === "Unknown" && f.away.name === "Unknown") return false;
+  if (f.home.name === "TBD" && f.away.name === "TBD") return false;
+  if (f.status === "scheduled") {
+    const age = Date.now() - new Date(f.startTime).getTime();
+    if (age > 24 * 60 * 60 * 1000) return false;
+  }
+  return true;
+}
+
 export async function getFixturesForSport(sport: SportKey): Promise<Fixture[]> {
   if (sport === "golf") return [];
   const configs = leaguesForSport(sport);
@@ -231,7 +241,7 @@ export async function getFixturesForSport(sport: SportKey): Promise<Fixture[]> {
 
   const fixtures: Fixture[] = [];
   for (const r of results) {
-    if (r.status === "fulfilled") fixtures.push(...r.value);
+    if (r.status === "fulfilled") fixtures.push(...r.value.filter(isDisplayable));
     else console.error("League fetch rejected:", r.reason);
   }
 

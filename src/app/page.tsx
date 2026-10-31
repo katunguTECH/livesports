@@ -67,7 +67,7 @@ function Hero({
       </p>
       <p className="mt-3 text-[11px] font-medium text-foreground-subtle">
         Detected: <span className="text-foreground-muted">{detectedCountry}</span>
-        {" Â· "}Showing broadcasters for:{" "}
+        {" Ã‚Â· "}Showing broadcasters for:{" "}
         <span className="text-foreground-muted">{showingCountry}</span>
       </p>
     </section>
