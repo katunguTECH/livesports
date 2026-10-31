@@ -74,17 +74,37 @@ function todayParam(): string {
   return `${yyyy}${mm}${dd}`;
 }
 
-function mapStatus(state: string): Fixture["status"] {
-  if (state === "in") return "live";
-  if (state === "post") return "finished";
-  return "scheduled";
+/**
+ * Read status from the competition first, then the event.
+ * Tennis/MMA put the live state on competitions inside groupings,
+ * while the event-level status stays "pre" for the whole tournament.
+ */
+function readStatus(ev: any, comp: any) {
+  const statusObj = comp?.status ?? ev?.status ?? {};
+  const type = statusObj?.type ?? {};
+
+  const state = type.state;
+  const completed = Boolean(type.completed);
+
+  let status: Fixture["status"];
+  if (completed || state === "post") status = "finished";
+  else if (state === "in") status = "live";
+  else status = "scheduled";
+
+  const detail =
+    statusObj?.shortDetail ??
+    type?.shortDetail ??
+    type?.detail ??
+    type?.description ??
+    statusObj?.displayClock ??
+    "";
+
+  return { status, detail, completed };
 }
 
 function pickTeam(competitors: any[], side: "home" | "away"): Team {
   const c = competitors.find((x) => x.homeAway === side) ?? {};
 
-  // Tennis/MMA: ESPN puts the name on the competitor itself AND on athlete.
-  // Team sports: name is on team. Try in order, skipping empty objects.
   const athlete = c.athlete ?? {};
   const team = c.team ?? {};
 
@@ -108,7 +128,6 @@ function pickTeam(competitors: any[], side: "home" | "away"): Team {
     c.name ??
     "Unknown";
 
-  // Numeric score (team sports)
   const rawScore = c.score;
   const numericScore =
     typeof rawScore === "number"
@@ -121,7 +140,6 @@ function pickTeam(competitors: any[], side: "home" | "away"): Team {
       : null;
   const scoreText = typeof rawScore === "string" ? rawScore : undefined;
 
-  // Tennis set scores: linescores is an array of { value: number }
   let linescoreText: string | undefined;
   if (Array.isArray(c.linescores) && c.linescores.length > 0) {
     const sets = c.linescores
@@ -147,7 +165,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 300 },
+    next: { revalidate: 60 }, // 60s, not 300 — live games should appear fast
     signal: AbortSignal.timeout(15000),
   });
 
@@ -166,14 +184,6 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
       ? ev.groupings.flatMap((g: any) => g.competitions ?? [])
       : ev.competitions ?? [];
 
-    const statusType = ev.status?.type ?? {};
-    const detail =
-      statusType.shortDetail ??
-      statusType.detail ??
-      ev.status?.displayClock ??
-      statusType.description ??
-      "";
-
     for (const comp of competitions) {
       const competitors = comp.competitors ?? [];
       if (competitors.length === 0) continue;
@@ -185,8 +195,8 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
         })
       );
 
-      // Use competition date if available, otherwise event date
       const startTime = comp.date ?? ev.date;
+      const { status, detail } = readStatus(ev, comp);
 
       fixtures.push({
         id: `${cfg.sport}:${cfg.slug}:${ev.id}:${comp.id ?? ""}`,
@@ -197,7 +207,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
         leagueName: cfg.name,
         leagueSlug: cfg.slug,
         startTime,
-        status: mapStatus(statusType.state),
+        status,
         statusDetail: detail,
         home: pickTeam(competitors, "home"),
         away: pickTeam(competitors, "away"),
@@ -244,20 +254,16 @@ export async function getGolfTournaments(): Promise<GolfTournament[]> {
       try {
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
-          next: { revalidate: 300 },
+          next: { revalidate: 60 },
           signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) return [];
         const data = await res.json();
+
         return (data.events ?? []).map((ev: any) => {
           const comp = ev.competitions?.[0] ?? {};
           const competitors = comp.competitors ?? [];
-          const statusType = ev.status?.type ?? {};
-          const detail =
-            statusType.shortDetail ??
-            statusType.detail ??
-            statusType.description ??
-            "";
+          const { status, detail } = readStatus(ev, comp);
 
           const leaderboard: GolfPlayer[] = competitors
             .map((c: any) => {
@@ -279,7 +285,7 @@ export async function getGolfTournaments(): Promise<GolfTournament[]> {
             leagueId: cfg.leagueId,
             leagueName: cfg.name,
             startTime: ev.date,
-            status: mapStatus(statusType.state),
+            status,
             statusDetail: detail,
             leaderboard,
           } as GolfTournament;

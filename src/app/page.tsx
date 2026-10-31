@@ -9,7 +9,7 @@ import RegionSelector from "@/components/RegionSelector";
 import SportTabs from "@/components/SportTabs";
 import type { SportKey } from "@/lib/leagues";
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 const VALID_SPORTS: SportKey[] = [
   "soccer",
@@ -67,7 +67,7 @@ function Hero({
       </p>
       <p className="mt-3 text-[11px] font-medium text-foreground-subtle">
         Detected: <span className="text-foreground-muted">{detectedCountry}</span>
-        {" · "}Showing broadcasters for:{" "}
+        {" Â· "}Showing broadcasters for:{" "}
         <span className="text-foreground-muted">{showingCountry}</span>
       </p>
     </section>
