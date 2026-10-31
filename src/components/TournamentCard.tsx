@@ -1,6 +1,7 @@
 // src/components/TournamentCard.tsx
 import type { GolfTournament } from "@/lib/api";
 import type { MatchedBroadcaster } from "@/lib/broadcaster-matcher";
+import LocalTime from "./LocalTime";
 
 type Props = {
   tournament: GolfTournament & { broadcasters: MatchedBroadcaster[] };
@@ -46,13 +47,17 @@ export default function TournamentCard({ tournament }: Props) {
 
         {status === "scheduled" && (
           <p className="mb-3 text-xs font-medium text-foreground-muted">
-            {new Date(startTime).toLocaleString(undefined, {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            <LocalTime
+              iso={startTime}
+              fallback={new Date(startTime).toLocaleString("en-GB", {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "UTC",
+              })}
+            />
           </p>
         )}
 

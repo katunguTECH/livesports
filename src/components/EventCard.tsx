@@ -1,6 +1,7 @@
 // src/components/EventCard.tsx
 import type { Fixture } from "@/lib/api";
 import type { MatchedBroadcaster } from "@/lib/broadcaster-matcher";
+import LocalTime from "./LocalTime";
 
 type Props = {
   fixture: Fixture & { broadcasters: MatchedBroadcaster[] };
