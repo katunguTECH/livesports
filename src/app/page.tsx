@@ -2,7 +2,7 @@
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import { getFixturesForSport, getGolfTournaments } from "@/lib/api";
-import { getBroadcastersForFixture } from "@/lib/broadcaster-matcher";
+import { getBroadcastersForFixtures, type MatchedBroadcaster } from "@/lib/broadcaster-matcher";
 import EventCard from "@/components/EventCard";
 import TournamentCard from "@/components/TournamentCard";
 import RegionSelector from "@/components/RegionSelector";
@@ -26,13 +26,13 @@ const VALID_SPORTS: SportKey[] = [
 type FixtureWithBroadcasters = Awaited<
   ReturnType<typeof getFixturesForSport>
 >[number] & {
-  broadcasters: Awaited<ReturnType<typeof getBroadcastersForFixture>>;
+  broadcasters: MatchedBroadcaster[];
 };
 
 type GolfWithBroadcasters = Awaited<
   ReturnType<typeof getGolfTournaments>
 >[number] & {
-  broadcasters: Awaited<ReturnType<typeof getBroadcastersForFixture>>;
+  broadcasters: MatchedBroadcaster[];
 };
 
 function Hero({
@@ -158,19 +158,20 @@ export default async function HomePage({
     try {
       const list = await getGolfTournaments();
       total = list.length;
-      tournaments = await Promise.all(
-        list.map(async (t) => {
-          try {
-            const broadcasters = await getBroadcastersForFixture(
-              { id: t.id, sport: "golf", leagueId: t.leagueId } as any,
-              countryCode
-            );
-            return { ...t, broadcasters };
-          } catch {
-            return { ...t, broadcasters: [] };
-          }
-        })
+      const golfFixtures = list.map((t) => ({
+        id: t.id,
+        sport: "golf" as const,
+        leagueId: t.leagueId,
+        espnBroadcasts: [],
+      })) as any;
+      const broadcastersByTournament = await getBroadcastersForFixtures(
+        golfFixtures,
+        countryCode
       );
+      tournaments = list.map((t) => ({
+        ...t,
+        broadcasters: broadcastersByTournament.get(t.id) ?? [],
+      }));
     } catch (err) {
       dataError = err instanceof Error ? err.message : "Unknown error";
     }
@@ -253,19 +254,15 @@ export default async function HomePage({
     const fixtures = await getFixturesForSport(sport);
     totalFetched = fixtures.length;
 
-    const withB = await Promise.all(
-      fixtures.map(async (fx) => {
-        try {
-          const broadcasters = await getBroadcastersForFixture(fx, countryCode);
-          return { ...fx, broadcasters };
-        } catch (err) {
-          console.error(`Broadcaster lookup failed for ${fx.id}:`, err);
-          return { ...fx, broadcasters: [] };
-        }
-      })
+    const broadcastersByFixture = await getBroadcastersForFixtures(
+      fixtures,
+      countryCode
     );
 
-    fixturesWithBroadcasters = withB;
+    fixturesWithBroadcasters = fixtures.map((fx) => ({
+      ...fx,
+      broadcasters: broadcastersByFixture.get(fx.id) ?? [],
+    }));
   } catch (err) {
     dataError = err instanceof Error ? err.message : "Unknown error";
     console.error("Fixture fetch failed:", err);

@@ -7,19 +7,11 @@ function normalizeDbUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   let s = raw.trim();
 
-  // Strip a pasted "DATABASE_URL=" prefix
   s = s.replace(/^DATABASE_URL\s*=\s*/, "");
-
-  // Strip surrounding quotes
   s = s.replace(/^["']|["']$/g, "");
-
-  // postgres:// -> postgresql://
   s = s.replace(/^postgres:\/\//, "postgresql://");
-
-  // Remove channel_binding (Prisma's pg driver does not support it)
   s = s.replace(/[&?]channel_binding=[^&]*/g, "");
 
-  // Ensure sslmode is present
   if (!/[?&]sslmode=/.test(s)) {
     s += (s.includes("?") ? "&" : "?") + "sslmode=require";
   }
@@ -40,7 +32,7 @@ function createClient(): PrismaClient {
     connectionString,
     connectionTimeoutMillis: 15_000,
     idleTimeoutMillis: 30_000,
-    max: 1,
+    max: 10,
   });
 
   return new PrismaClient({ adapter });
