@@ -165,7 +165,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
 
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 60 }, // 60s, not 300 Ã¢â‚¬â€ live games should appear fast
+    next: { revalidate: 60 }, // 60s, not 300 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â live games should appear fast
     signal: AbortSignal.timeout(15000),
   });
 
@@ -195,7 +195,7 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
         })
       );
 
-      const startTime = comp.date ?? ev.date;
+      const startTime = toUtcIso(comp.date ?? ev.date);
       const { status, detail } = readStatus(ev, comp);
 
       fixtures.push({
@@ -309,7 +309,7 @@ export async function getGolfTournaments(): Promise<GolfTournament[]> {
             name: ev.name ?? cfg.name,
             leagueId: cfg.leagueId,
             leagueName: cfg.name,
-            startTime: ev.date,
+            startTime: toUtcIso(ev.date),
             status,
             statusDetail: detail,
             leaderboard,
@@ -329,3 +329,8 @@ export async function getGolfTournaments(): Promise<GolfTournament[]> {
 }
 
 export { LEAGUES };
+function toUtcIso(s: string): string {
+  if (!s) return s;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return s;
+  return (s.includes("T") ? s : s.replace(" ", "T")) + "Z";
+}
