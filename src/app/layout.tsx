@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,14 +16,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LiveSports — Find where to watch any sport, anywhere",
+  title: "LiveSports - Find where to watch any sport, anywhere",
   description:
-    "A global directory of legal sports broadcasters. Live fixtures across football, basketball, NFL, baseball, hockey, tennis, MMA, golf, and rugby — with broadcaster links for every region.",
+    "A global directory of legal sports broadcasters. Live fixtures across football, basketball, NFL, baseball, hockey, tennis, MMA, golf, and rugby - with broadcaster links for every region.",
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://livesports-lac.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://sports4.life"
   ),
   openGraph: {
-    title: "LiveSports — Global sports broadcast directory",
+    title: "LiveSports - Global sports broadcast directory",
     description:
       "Find where to watch any sport, anywhere in the world. Live fixtures, worldwide broadcasters, no geolocation locks.",
     type: "website",
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "LiveSports — Global sports broadcast directory",
+    title: "LiveSports - Global sports broadcast directory",
     description:
       "Find where to watch any sport, anywhere in the world.",
   },
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Header />
         <div className="flex-1">{children}</div>
         <Footer />
+        <GoogleAnalytics gaId="G-T62SH96D1S" />
       </body>
     </html>
   );
