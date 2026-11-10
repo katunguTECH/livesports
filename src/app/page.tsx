@@ -143,7 +143,19 @@ export default async function HomePage({
 }) {
   const params = await searchParams;
   const headersList = await headers();
-  const detectedCountry = headersList.get("x-vercel-ip-country") ?? "KE";
+  let detectedCountry = headersList.get("x-nf-request-country") || headersList.get("cf-ipcountry") || headersList.get("x-vercel-ip-country");
+  if (!detectedCountry) {
+    try {
+      const res = await fetch("https://ipapi.co/json/", { next: { revalidate: 3600 } });
+      if (res.ok) {
+        const data = await res.json();
+        detectedCountry = data.country_code;
+      }
+    } catch (e) {
+      console.error("IP fallback failed", e);
+    }
+  }
+  detectedCountry = detectedCountry || "US";
 
   const countryCode = (params.region ?? detectedCountry).toUpperCase();
   const sport: SportKey = VALID_SPORTS.includes(params.sport as SportKey)
