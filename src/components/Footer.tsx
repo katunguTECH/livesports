@@ -16,7 +16,7 @@ export default function Footer() {
               <span className="text-sm font-semibold text-foreground">LiveSports</span>
             </div>
             <p className="mt-3 max-w-xs text-xs leading-relaxed text-foreground-muted">
-              A global directory of legal sports broadcasters. We don&apos;t host streams — we help you find where to watch.
+              A global directory of legal sports broadcasters. We don&apos;t host streams â€” we help you find where to watch.
             </p>
           </div>
 
@@ -49,8 +49,8 @@ export default function Footer() {
             </h3>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
-                <a href="mailto:hello@livesports.app" className="text-foreground-muted hover:text-foreground">
-                  hello@livesports.app
+                <a href="mailto:info@sports4.life" className="text-foreground-muted hover:text-foreground">
+                  info@sports4.life
                 </a>
               </li>
             </ul>
