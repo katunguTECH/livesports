@@ -29,6 +29,11 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "LiveSports",
   },
+  verification: {
+    other: {
+      "mitgo-verification": "68f683e0-d6ca-479b-a3ca-b234f10a974c",
+    },
+  },
   twitter: {
     card: "summary_large_image",
     title: "LiveSports - Global sports broadcast directory",
