@@ -31,7 +31,8 @@ export const metadata: Metadata = {
   },
   verification: {
     other: {
-            "mitgo-verification": ["68f683e0-d6ca-479b-a3ca-b234f10a974c", "5561c83a-8b74-427d-8b98-b3734c6a7135"],
+                  "mitgo-verification": ["68f683e0-d6ca-479b-a3ca-b234f10a974c", "5561c83a-8b74-427d-8b98-b3734c6a7135"],
+      "fo-verify": "e3a6a8d5-d23f-498e-bcfb-37678edbbc78",
     },
   },
   twitter: {
