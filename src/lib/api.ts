@@ -1,7 +1,54 @@
-// src/lib/api.ts
-import { LEAGUES, leaguesForSport, type LeagueConfig, type SportKey } from "./leagues";
+
+import {
+  LEAGUES,
+  leaguesForSport,
+  type LeagueConfig,
+  type SportKey,
+} from "./leagues";
 
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Share one request limit across fixtures and golf so the homepage
+// does not send a large burst of requests to ESPN at the same time.
+const ESPN_MAX_CONCURRENT_REQUESTS = 6;
+let activeEspnRequests = 0;
+const waitingEspnRequests: Array<() => void> = [];
+
+async function acquireEspnRequestSlot(): Promise<void> {
+  if (activeEspnRequests < ESPN_MAX_CONCURRENT_REQUESTS) {
+    activeEspnRequests += 1;
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    waitingEspnRequests.push(resolve);
+  });
+}
+
+function releaseEspnRequestSlot(): void {
+  const nextRequest = waitingEspnRequests.shift();
+
+  if (nextRequest) {
+    // Hand the existing slot directly to the next waiting request.
+    nextRequest();
+  } else {
+    activeEspnRequests -= 1;
+  }
+}
+
+async function withEspnRequest<T>(
+  request: () => Promise<T>
+): Promise<T> {
+  await acquireEspnRequestSlot();
+
+  try {
+    return await request();
+  } finally {
+    releaseEspnRequestSlot();
+  }
+}
 
 export interface Team {
   id: string;
@@ -57,6 +104,7 @@ export interface GolfTournament {
 const SPORT_LABELS: Record<SportKey, string> = {
   soccer: "Football",
   basketball: "Basketball",
+  ncaab: "NCAAB",
   football: "NFL",
   baseball: "Baseball",
   hockey: "Hockey",
@@ -66,18 +114,54 @@ const SPORT_LABELS: Record<SportKey, string> = {
   rugby: "Rugby",
 };
 
+/**
+ * Get today's date according to the US Eastern timezone.
+ * ESPN scoreboard dates are based on the US event calendar.
+ */
 function todayParam(): string {
-  const d = new Date();
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+
+  return `${year}${month}${day}`;
+}
+
+/**
+ * Return yesterday and today's ESPN date strings.
+ * This helps capture games that ESPN places under the
+ * previous US Eastern calendar date.
+ */
+function scoreboardDates(): string[] {
+  const today = todayParam();
+
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(4, 6));
+  const day = Number(today.slice(6, 8));
+
+  const previousDate = new Date(
+    Date.UTC(year, month - 1, day) - DAY_MS
+  );
+
+  const yesterday = [
+    previousDate.getUTCFullYear(),
+    String(previousDate.getUTCMonth() + 1).padStart(2, "0"),
+    String(previousDate.getUTCDate()).padStart(2, "0"),
+  ].join("");
+
+  return [yesterday, today];
 }
 
 /**
  * Read status from the competition first, then the event.
- * Tennis/MMA put the live state on competitions inside groupings,
- * while the event-level status stays "pre" for the whole tournament.
+ * Tennis and MMA can put live status on competitions
+ * while the event-level status remains "pre".
  */
 function readStatus(ev: any, comp: any) {
   const statusObj = comp?.status ?? ev?.status ?? {};
@@ -87,9 +171,14 @@ function readStatus(ev: any, comp: any) {
   const completed = Boolean(type.completed);
 
   let status: Fixture["status"];
-  if (completed || state === "post") status = "finished";
-  else if (state === "in") status = "live";
-  else status = "scheduled";
+
+  if (completed || state === "post") {
+    status = "finished";
+  } else if (state === "in") {
+    status = "live";
+  } else {
+    status = "scheduled";
+  }
 
   const detail =
     statusObj?.shortDetail ??
@@ -102,8 +191,12 @@ function readStatus(ev: any, comp: any) {
   return { status, detail, completed };
 }
 
-function pickTeam(competitors: any[], side: "home" | "away"): Team {
-  const c = competitors.find((x) => x.homeAway === side) ?? {};
+function pickTeam(
+  competitors: any[],
+  side: "home" | "away"
+): Team {
+  const c =
+    competitors.find((x) => x.homeAway === side) ?? {};
 
   const athlete = c.athlete ?? {};
   const team = c.team ?? {};
@@ -129,27 +222,41 @@ function pickTeam(competitors: any[], side: "home" | "away"): Team {
     "Unknown";
 
   const rawScore = c.score;
+
   const numericScore =
     typeof rawScore === "number"
       ? rawScore
       : rawScore !== null &&
-        rawScore !== undefined &&
-        rawScore !== "" &&
-        Number.isFinite(Number(rawScore))
-      ? Number(rawScore)
-      : null;
-  const scoreText = typeof rawScore === "string" ? rawScore : undefined;
+          rawScore !== undefined &&
+          rawScore !== "" &&
+          Number.isFinite(Number(rawScore))
+        ? Number(rawScore)
+        : null;
+
+  const scoreText =
+    typeof rawScore === "string" ? rawScore : undefined;
 
   let linescoreText: string | undefined;
-  if (Array.isArray(c.linescores) && c.linescores.length > 0) {
+
+  if (
+    Array.isArray(c.linescores) &&
+    c.linescores.length > 0
+  ) {
     const sets = c.linescores
       .map((ls: any) => ls.value ?? ls.displayValue)
-      .filter((v: any) => v !== undefined && v !== null);
-    if (sets.length > 0) linescoreText = sets.join(" ");
+      .filter(
+        (v: any) => v !== undefined && v !== null
+      );
+
+    if (sets.length > 0) {
+      linescoreText = sets.join(" ");
+    }
   }
 
   return {
-    id: String(athlete.id ?? team.id ?? c.id ?? ""),
+    id: String(
+      athlete.id ?? team.id ?? c.id ?? ""
+    ),
     name,
     shortName,
     logo: athlete.logo ?? team.logo ?? "",
@@ -160,17 +267,41 @@ function pickTeam(competitors: any[], side: "home" | "away"): Team {
   };
 }
 
-async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> {
-  const url = `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?dates=${date}`;
-
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-    next: { revalidate: 60 }, // 60s, not 300 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â live games should appear fast
-    signal: AbortSignal.timeout(15000),
+/**
+ * Fetch one league's scoreboard for an ESPN date or date range.
+ */
+async function fetchLeague(
+  cfg: LeagueConfig,
+  dateRange: string
+): Promise<Fixture[]> {
+  const params = new URLSearchParams({
+    dates: dateRange,
+    limit: "500",
   });
 
+  // ESPN uses groups to return a broader NCAAB scoreboard.
+  if (cfg.slug === "mens-college-basketball") {
+    params.set("groups", "50");
+  }
+
+  const url =
+    `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?${params.toString()}`;
+
+  const res = await withEspnRequest(() => fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+    next: {
+      revalidate: 60,
+    },
+    // Limit each active ESPN request to 8 seconds.
+    signal: AbortSignal.timeout(8000),
+  }));
+
   if (!res.ok) {
-    console.error(`ESPN ${cfg.espnSport}/${cfg.slug} returned ${res.status}`);
+    console.error(
+      `ESPN ${cfg.espnSport}/${cfg.slug} returned ${res.status}`
+    );
     return [];
   }
 
@@ -179,23 +310,35 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
   const fixtures: Fixture[] = [];
 
   for (const ev of events) {
-    // Tennis nests competitions inside groupings. Standard sports use ev.competitions.
+    // Tennis can nest competitions inside groupings.
+    // Standard sports use ev.competitions.
     const competitions: any[] = ev.groupings
-      ? ev.groupings.flatMap((g: any) => g.competitions ?? [])
+      ? ev.groupings.flatMap(
+          (g: any) => g.competitions ?? []
+        )
       : ev.competitions ?? [];
 
     for (const comp of competitions) {
       const competitors = comp.competitors ?? [];
-      if (competitors.length === 0) continue;
 
-      const compBroadcasts: BroadcasterHint[] = (comp.broadcasts ?? []).map(
-        (b: any) => ({
-          name: b.media?.shortName ?? b.media?.name ?? "",
-          market: b.market?.type ?? "",
-        })
+      if (competitors.length === 0) {
+        continue;
+      }
+
+      const compBroadcasts: BroadcasterHint[] = (
+        comp.broadcasts ?? []
+      ).map((b: any) => ({
+        name:
+          b.media?.shortName ??
+          b.media?.name ??
+          "",
+        market: b.market?.type ?? "",
+      }));
+
+      const startTime = toUtcIso(
+        comp.date ?? ev.date
       );
 
-      const startTime = toUtcIso(comp.date ?? ev.date);
       const { status, detail } = readStatus(ev, comp);
 
       fixtures.push({
@@ -219,6 +362,9 @@ async function fetchLeague(cfg: LeagueConfig, date: string): Promise<Fixture[]> 
   return fixtures;
 }
 
+/**
+ * Filter out fixtures that should not appear on the directory.
+ */
 function isDisplayable(f: Fixture): boolean {
   const now = Date.now();
   const startMs = new Date(f.startTime).getTime();
@@ -226,111 +372,297 @@ function isDisplayable(f: Fixture): boolean {
   const futureMs = startMs - now;
 
   const bothJunk =
-    (f.home.name === "Unknown" && f.away.name === "Unknown") ||
-    (f.home.name === "TBD" && f.away.name === "TBD");
+    (f.home.name === "Unknown" &&
+      f.away.name === "Unknown") ||
+    (f.home.name === "TBD" &&
+      f.away.name === "TBD");
+
   const anyJunk =
     f.home.name === "Unknown" ||
     f.away.name === "Unknown" ||
     f.home.name === "TBD" ||
     f.away.name === "TBD";
 
-  if (bothJunk) return false;
+  if (bothJunk) {
+    return false;
+  }
 
   if (f.status === "scheduled") {
-    if (ageMs > 24 * 60 * 60 * 1000) return false;
-    if (futureMs > 24 * 60 * 60 * 1000 && anyJunk) return false;
+    // Remove scheduled fixtures more than 24 hours old.
+    if (ageMs > DAY_MS) {
+      return false;
+    }
+
+    // Avoid showing distant fixtures with unknown teams.
+    if (futureMs > DAY_MS && anyJunk) {
+      return false;
+    }
   }
 
   return true;
 }
 
-export async function getFixturesForSport(sport: SportKey): Promise<Fixture[]> {
-  if (sport === "golf") return [];
-  const configs = leaguesForSport(sport);
-  if (configs.length === 0) return [];
+/**
+ * Sort live fixtures first, upcoming fixtures second,
+ * and completed fixtures last.
+ */
+function sortFixtures(fixtures: Fixture[]): Fixture[] {
+  const rank = {
+    live: 0,
+    scheduled: 1,
+    finished: 2,
+  } as const;
 
-  const date = todayParam();
+  return fixtures.sort((a, b) => {
+    if (rank[a.status] !== rank[b.status]) {
+      return rank[a.status] - rank[b.status];
+    }
+
+    return (
+      new Date(a.startTime).getTime() -
+      new Date(b.startTime).getTime()
+    );
+  });
+}
+
+/**
+ * Fetch fixtures for a sport across yesterday and today.
+ * Separate single-day ESPN requests are made for yesterday and today.
+ * Duplicate fixtures are removed using their unique IDs.
+ */
+export async function getFixturesForSport(
+  sport: SportKey
+): Promise<Fixture[]> {
+  if (sport === "golf") {
+    return [];
+  }
+
+  const configs = leaguesForSport(sport);
+
+  if (configs.length === 0) {
+    return [];
+  }
+
+  // ESPN's scoreboard endpoint currently rejects date ranges with HTTP 400.
+  // Fetch each day separately to preserve yesterday-and-today coverage.
+  const dates = scoreboardDates();
+
   const results = await Promise.allSettled(
-    configs.map((cfg) => fetchLeague(cfg, date))
+    configs.flatMap((cfg) =>
+      dates.map((date) => fetchLeague(cfg, date))
+    )
   );
 
   const fixtures: Fixture[] = [];
+
   for (const r of results) {
-    if (r.status === "fulfilled") fixtures.push(...r.value.filter(isDisplayable));
-    else console.error("League fetch rejected:", r.reason);
+    if (r.status === "fulfilled") {
+      fixtures.push(
+        ...r.value.filter(isDisplayable)
+      );
+    } else {
+      console.error(
+        "League fetch rejected:",
+        r.reason
+      );
+    }
   }
 
-  const rank = { live: 0, scheduled: 1, finished: 2 } as const;
-  fixtures.sort((a, b) => {
-    if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
-    return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-  });
+  // Remove duplicate events returned by multiple date requests.
+  const uniqueFixtures = [
+    ...new Map(
+      fixtures.map((fixture) => [
+        fixture.id,
+        fixture,
+      ])
+    ).values(),
+  ];
 
-  return fixtures;
+  return sortFixtures(uniqueFixtures);
 }
 
-export async function getGolfTournaments(): Promise<GolfTournament[]> {
+/**
+ * Fetch fixtures across all configured sports.
+ * Golf tournaments are fetched separately.
+ */
+export async function getAllFixtures(): Promise<Fixture[]> {
+  const sports = [
+    ...new Set(LEAGUES.map((league) => league.sport)),
+  ].filter((sport) => sport !== "golf");
+
+  const results = await Promise.allSettled(
+    sports.map((sport) => getFixturesForSport(sport))
+  );
+
+  const fixtures: Fixture[] = [];
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      fixtures.push(...result.value);
+    } else {
+      console.error(
+        "Sport fetch rejected:",
+        result.reason
+      );
+    }
+  }
+
+  const uniqueFixtures = [
+    ...new Map(
+      fixtures.map((fixture) => [
+        fixture.id,
+        fixture,
+      ])
+    ).values(),
+  ];
+
+  return sortFixtures(uniqueFixtures);
+}
+
+/**
+ * Fetch golf tournaments and their current leaderboards.
+ */
+export async function getGolfTournaments(): Promise<
+  GolfTournament[]
+> {
   const configs = leaguesForSport("golf");
   const date = todayParam();
 
   const results = await Promise.allSettled(
-    configs.map(async (cfg): Promise<GolfTournament[]> => {
-      const url = `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?dates=${date}`;
-      try {
-        const res = await fetch(url, {
-          headers: { Accept: "application/json" },
-          next: { revalidate: 60 },
-          signal: AbortSignal.timeout(15000),
+    configs.map(
+      async (cfg): Promise<GolfTournament[]> => {
+        const params = new URLSearchParams({
+          dates: date,
+          limit: "500",
         });
-        if (!res.ok) return [];
-        const data = await res.json();
 
-        return (data.events ?? []).map((ev: any) => {
-          const comp = ev.competitions?.[0] ?? {};
-          const competitors = comp.competitors ?? [];
-          const { status, detail } = readStatus(ev, comp);
+        const url =
+          `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?${params.toString()}`;
 
-          const leaderboard: GolfPlayer[] = competitors
-            .map((c: any) => {
-              const a = c.athlete ?? c.team ?? {};
+        try {
+          const res = await withEspnRequest(() => fetch(url, {
+            headers: {
+              Accept: "application/json",
+            },
+            next: {
+              revalidate: 60,
+            },
+            // Golf shares the global ESPN request limit with other sports.
+            signal: AbortSignal.timeout(8000),
+          }));
+
+          if (!res.ok) {
+            return [];
+          }
+
+          const data = await res.json();
+
+          return (data.events ?? []).map(
+            (ev: any) => {
+              const comp =
+                ev.competitions?.[0] ?? {};
+
+              const competitors =
+                comp.competitors ?? [];
+
+              const { status, detail } =
+                readStatus(ev, comp);
+
+              const leaderboard: GolfPlayer[] =
+                competitors
+                  .map((c: any) => {
+                    const a =
+                      c.athlete ?? c.team ?? {};
+
+                    return {
+                      name:
+                        a.displayName ??
+                        a.fullName ??
+                        a.name ??
+                        "Unknown",
+                      score: String(
+                        c.score ?? "-"
+                      ),
+                      position: String(
+                        c.order ??
+                          c.status?.position
+                            ?.displayName ??
+                          "-"
+                      ),
+                      order: Number(
+                        c.order ?? 999
+                      ),
+                    };
+                  })
+                  .sort(
+                    (x: GolfPlayer, y: GolfPlayer) =>
+                      x.order - y.order
+                  )
+                  .slice(0, 5);
+
               return {
-                name: a.displayName ?? a.fullName ?? a.name ?? "Unknown",
-                score: String(c.score ?? "-"),
-                position: String(c.order ?? c.status?.position?.displayName ?? "-"),
-                order: Number(c.order ?? 999),
-              };
-            })
-            .sort((x: GolfPlayer, y: GolfPlayer) => x.order - y.order)
-            .slice(0, 5);
-
-          return {
-            id: `golf:${cfg.slug}:${ev.id}`,
-            eventId: String(ev.id),
-            name: ev.name ?? cfg.name,
-            leagueId: cfg.leagueId,
-            leagueName: cfg.name,
-            startTime: toUtcIso(ev.date),
-            status,
-            statusDetail: detail,
-            leaderboard,
-          } as GolfTournament;
-        });
-      } catch {
-        return [];
+                id: `golf:${cfg.slug}:${ev.id}`,
+                eventId: String(ev.id),
+                name: ev.name ?? cfg.name,
+                leagueId: cfg.leagueId,
+                leagueName: cfg.name,
+                startTime: toUtcIso(ev.date),
+                status,
+                statusDetail: detail,
+                leaderboard,
+              } as GolfTournament;
+            }
+          );
+        } catch (error) {
+          console.error(
+            `Golf fetch failed for ${cfg.slug}:`,
+            error
+          );
+          return [];
+        }
       }
-    })
+    )
   );
 
   const all: GolfTournament[] = [];
+
   for (const r of results) {
-    if (r.status === "fulfilled") all.push(...r.value);
+    if (r.status === "fulfilled") {
+      all.push(...r.value);
+    } else {
+      console.error(
+        "Golf fetch rejected:",
+        r.reason
+      );
+    }
   }
-  return all;
+
+  return [
+    ...new Map(
+      all.map((tournament) => [
+        tournament.id,
+        tournament,
+      ])
+    ).values(),
+  ];
 }
 
 export { LEAGUES };
+
+/**
+ * Normalize ESPN dates to ISO UTC strings.
+ */
 function toUtcIso(s: string): string {
-  if (!s) return s;
-  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return s;
-  return (s.includes("T") ? s : s.replace(" ", "T")) + "Z";
+  if (!s) {
+    return s;
+  }
+
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) {
+    return s;
+  }
+
+  return (
+    (s.includes("T") ? s : s.replace(" ", "T")) +
+    "Z"
+  );
 }

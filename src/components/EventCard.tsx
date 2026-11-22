@@ -1,13 +1,29 @@
-// src/components/EventCard.tsx
+
+"use client";
+
+import { useState } from "react";
 import type { Fixture } from "@/lib/api";
 import type { MatchedBroadcaster } from "@/lib/broadcaster-matcher";
-import LocalTime from "./LocalTime";
+import CommunityLinks from "@/components/CommunityLinks";
+
+type CommunityLink = {
+  id: number;
+  fixtureId: string;
+  title: string | null;
+  url: string;
+  status: string;
+  createdAt: string;
+};
 
 type Props = {
   fixture: Fixture & { broadcasters: MatchedBroadcaster[] };
+  communityLinks: CommunityLink[];
 };
 
-export default function EventCard({ fixture }: Props) {
+export default function EventCard({
+  fixture,
+  communityLinks,
+}: Props) {
   const {
     home,
     away,
@@ -19,24 +35,52 @@ export default function EventCard({ fixture }: Props) {
     broadcasters,
   } = fixture;
 
+  const [error, setError] = useState<string | null>(null);
+
   const isLive = status === "live";
   const isFinished = status === "finished";
+
+  const handlePlayStream = () => {
+    setError(null);
+
+    if (!broadcasters || broadcasters.length === 0) {
+      setError("No official broadcaster is currently listed for this event.");
+      return;
+    }
+
+    const broadcaster = broadcasters.find(
+      (b) => b.affiliateUrl && /^https?:\/\//i.test(b.affiliateUrl)
+    );
+
+    if (!broadcaster) {
+      setError("No valid broadcaster link is available.");
+      return;
+    }
+
+    window.open(
+      broadcaster.affiliateUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
 
   const renderScore = (team: typeof home) => {
     if (team.linescoreText) {
       return (
-        <span className="whitespace-nowrap font-mono text-[13px] font-medium text-foreground-muted">
+        <span className="font-mono text-[13px] text-foreground-muted">
           {team.linescoreText}
         </span>
       );
     }
+
     if (team.scoreText) {
       return (
-        <span className="whitespace-nowrap font-mono text-[13px] font-medium text-foreground-muted">
+        <span className="font-mono text-[13px] text-foreground-muted">
           {team.scoreText}
         </span>
       );
     }
+
     if (team.score !== null) {
       return (
         <span className="font-mono text-lg font-bold tabular-nums text-foreground">
@@ -44,7 +88,34 @@ export default function EventCard({ fixture }: Props) {
         </span>
       );
     }
+
     return null;
+  };
+
+  const formatDate = (isoString: string) => {
+    const date = new Date(isoString);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Time unavailable";
+    }
+
+    const days = [
+      "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+    ];
+
+    const months = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+
+    const dayName = days[date.getDay()];
+    const dayNum = date.getDate();
+    const monthName = months[date.getMonth()];
+
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+
+    return `${dayName} ${dayNum} ${monthName}, ${hours}:${minutes}`;
   };
 
   return (
@@ -54,12 +125,14 @@ export default function EventCard({ fixture }: Props) {
           <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-subtle">
             {sportLabel} &middot; {leagueName}
           </span>
+
           {isLive && (
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-live px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
               {statusDetail}
             </span>
           )}
+
           {isFinished && (
             <span className="whitespace-nowrap rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">
               {statusDetail || "Final"}
@@ -72,25 +145,37 @@ export default function EventCard({ fixture }: Props) {
             <p className="truncate text-[15px] font-semibold text-foreground">
               {home.shortName}
             </p>
+
             {(isLive || isFinished) && renderScore(home)}
           </div>
+
           <div className="flex items-baseline justify-between gap-3">
             <p className="truncate text-[15px] font-semibold text-foreground">
               {away.shortName}
             </p>
+
             {(isLive || isFinished) && renderScore(away)}
           </div>
         </div>
 
         {status === "scheduled" && (
           <p className="mt-3 text-xs font-medium text-foreground-muted">
-            {new Date(startTime).toLocaleString(undefined, {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatDate(startTime)}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <button
+          onClick={handlePlayStream}
+          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Watch Stream
+        </button>
+
+        {error && (
+          <p className="mt-2 text-xs text-red-500">
+            {error}
           </p>
         )}
       </div>
@@ -104,8 +189,7 @@ export default function EventCard({ fixture }: Props) {
                 href={b.affiliateUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground-muted transition-colors hover:border-primary/20 hover:bg-chip hover:text-chip-foreground"
-                title={`${b.name} (${b.countryCode})`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground-muted hover:bg-chip"
               >
                 <span className="font-mono text-[9px] font-bold opacity-70">
                   {b.countryCode}
@@ -113,16 +197,18 @@ export default function EventCard({ fixture }: Props) {
                 {b.name}
               </a>
             ))}
-            {broadcasters.length > 4 && (
-              <span className="inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium text-foreground-subtle">
-                +{broadcasters.length - 4}
-              </span>
-            )}
           </>
         ) : (
-          <p className="text-xs text-foreground-subtle">No broadcaster listed</p>
+          <p className="text-xs text-foreground-subtle">
+            No broadcaster listed
+          </p>
         )}
       </div>
+
+      <CommunityLinks
+        fixture={fixture}
+        initialLinks={communityLinks}
+      />
     </article>
   );
 }

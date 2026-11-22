@@ -1,12 +1,12 @@
-// src/components/SportTabs.tsx
+
 import Link from "next/link";
-import { SPORT_TABS, type SportKey } from "@/lib/leagues";
+import { SPORT_TABS, type SportTabKey } from "@/lib/leagues";
 
 export default function SportTabs({
   active,
   region,
 }: {
-  active: SportKey;
+  active: SportTabKey;
   region: string;
 }) {
   return (
@@ -14,6 +14,7 @@ export default function SportTabs({
       <div className="flex gap-1 pb-1">
         {SPORT_TABS.map((t) => {
           const isActive = t.key === active;
+
           return (
             <Link
               key={t.key}

@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -5,6 +6,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum CommunityLinkStatus {
+  PENDING
+  PUBLISHED
+  REMOVED
 }
 
 model Broadcaster {
@@ -29,4 +36,33 @@ model LeagueBroadcasterMapping {
 
   @@unique([sport, leagueId, countryCode])
   @@index([sport, countryCode])
+}
+
+model CommunityLink {
+  id                Int                 @id @default(autoincrement())
+  fixtureId         String
+  sport             String
+  leagueName        String
+  homeName          String
+  awayName          String
+  title             String?
+  url               String
+  submittedByUserId String?
+  status            CommunityLinkStatus @default(PENDING)
+  createdAt         DateTime            @default(now())
+  reports           CommunityLinkReport[]
+
+  @@unique([fixtureId, url])
+  @@index([fixtureId, status, createdAt])
+}
+
+model CommunityLinkReport {
+  id        Int           @id @default(autoincrement())
+  linkId    Int
+  reason    String
+  details   String?
+  createdAt DateTime      @default(now())
+  link      CommunityLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, createdAt])
 }

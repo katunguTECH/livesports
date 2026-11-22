@@ -43,3 +43,28 @@ next-env.d.ts
 /src/generated/prisma
 
 *.bak
+
+# Private API keys and local credentials
+Footballdata.io api key.txt
+
+# Temporary browser captures and investigation files
+embed-page.html
+embed.har
+event-page-dom.html
+event-page-visible.html
+event-page-wait.html
+event-page.html
+rendered-page.html
+
+# Local scripts and test data
+PlayStream.ps1
+sportsurge_scraper.py
+insert-links.ps1
+links-pistons-pelicans.json
+
+# Local notes and backups
+New Text Document*.txt
+src/lib/New Text Document.txt
+src/lib/api-backup.ts
+src/lib/api.ts.backup
+
