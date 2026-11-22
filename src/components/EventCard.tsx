@@ -1,7 +1,6 @@
 
 "use client";
 
-import { useState } from "react";
 import type { Fixture } from "@/lib/api";
 import type { MatchedBroadcaster } from "@/lib/broadcaster-matcher";
 import CommunityLinks from "@/components/CommunityLinks";
@@ -35,34 +34,10 @@ export default function EventCard({
     broadcasters,
   } = fixture;
 
-  const [error, setError] = useState<string | null>(null);
-
   const isLive = status === "live";
   const isFinished = status === "finished";
 
-  const handlePlayStream = () => {
-    setError(null);
 
-    if (!broadcasters || broadcasters.length === 0) {
-      setError("No official broadcaster is currently listed for this event.");
-      return;
-    }
-
-    const broadcaster = broadcasters.find(
-      (b) => b.affiliateUrl && /^https?:\/\//i.test(b.affiliateUrl)
-    );
-
-    if (!broadcaster) {
-      setError("No valid broadcaster link is available.");
-      return;
-    }
-
-    window.open(
-      broadcaster.affiliateUrl,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  };
 
   const renderScore = (team: typeof home) => {
     if (team.linescoreText) {
@@ -161,21 +136,6 @@ export default function EventCard({
         {status === "scheduled" && (
           <p className="mt-3 text-xs font-medium text-foreground-muted">
             {formatDate(startTime)}
-          </p>
-        )}
-      </div>
-
-      <div className="mt-4">
-        <button
-          onClick={handlePlayStream}
-          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Watch Stream
-        </button>
-
-        {error && (
-          <p className="mt-2 text-xs text-red-500">
-            {error}
           </p>
         )}
       </div>
