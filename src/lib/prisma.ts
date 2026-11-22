@@ -1,32 +1,46 @@
-
 import { PrismaClient } from "@/generated/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString = process.env.DATABASE_URL;
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-if (!connectionString) {
-  throw new Error("DATABASE_URL is not configured");
+function normalizeDbUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let s = raw.trim();
+
+  s = s.replace(/^DATABASE_URL\s*=\s*/, "");
+  s = s.replace(/^["']|["']$/g, "");
+  s = s.replace(/^postgres:\/\//, "postgresql://");
+  s = s.replace(/[&?]channel_binding=[^&]*/g, "");
+
+  if (!/[?&]sslmode=/.test(s)) {
+    s += (s.includes("?") ? "&" : "?") + "sslmode=require";
+  }
+
+  return s;
 }
 
-const adapter = new PrismaPg({
-  connectionString,
-});
+function createClient(): PrismaClient {
+  const connectionString = normalizeDbUrl(
+    process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL
+  );
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not set");
+  }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
+  const adapter = new PrismaPg({
+    connectionString,
+    connectionTimeoutMillis: 15_000,
+    idleTimeoutMillis: 30_000,
+    max: 10,
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  return new PrismaClient({ adapter });
 }
 
-// Backward compatibility for existing application imports.
 export function getPrisma(): PrismaClient {
-  return prisma;
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createClient();
+  }
+  return globalForPrisma.prisma;
 }
