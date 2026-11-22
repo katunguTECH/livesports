@@ -405,16 +405,28 @@ async function fetchLeague(
  * tennis which has separate ATP/WTA configs under the same espnSport)
  * fall back to per-league fetching.
  */
+/**
+ * Sports that must use league-specific ESPN scoreboard URLs.
+ *
+ * IMPORTANT:
+ * ESPN's scoreboard API is not reliably available as a generic
+ * sport-level endpoint for these sports. NBA/NFL/MMA/Rugby in
+ * particular need the league slug in the URL, e.g.
+ *
+ *   /basketball/nba/scoreboard
+ *   /football/nfl/scoreboard
+ *   /mma/ufc/scoreboard
+ *   /rugby/<league>/scoreboard
+ *
+ * fetchSport() therefore falls back to fetchLeague() for every
+ * configured league. NCAAB and tennis also require this behavior.
+ */
 const SPORT_LEVEL_FETCH: Partial<Record<SportKey, boolean>> = {
-  // Soccer uses individual league scoreboards because the sport-wide
-  // ESPN soccer scoreboard endpoint returns 404.
-  basketball: true,
-  football: true,
-  baseball: true,
-  hockey: true,
-  mma: true,
-  rugby: true,
-  // ncaab uses groups=50, tennis needs per-league handling
+  // Intentionally empty.
+  //
+  // Do not set basketball, football, mma, rugby, baseball, or hockey
+  // to true here. The league-specific endpoint is more reliable and
+  // allows each configured league slug to be requested correctly.
 };
 
 async function fetchSport(
@@ -579,6 +591,11 @@ function sortFixtures(fixtures: Fixture[]): Fixture[] {
  * Fetch fixtures for a sport across yesterday and today.
  * Separate single-day ESPN requests are made for yesterday and today.
  * Duplicate fixtures are removed using their unique IDs.
+ *
+ * Each sport is fetched through its configured league-specific ESPN
+ * endpoint. This is important for NBA/NFL/MMA/Rugby because the
+ * generic sport-level scoreboard endpoint does not provide the same
+ * league data reliably.
  *
  * The whole sport fetch is capped at SPORT_TIMEOUT_MS so a slow
  * ESPN response for one league can't block the homepage forever.
