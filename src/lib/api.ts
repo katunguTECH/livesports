@@ -1,5 +1,4 @@
-
-import {
+﻿import {
   LEAGUES,
   leaguesForSport,
   type LeagueConfig,
@@ -10,9 +9,42 @@ const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Share one request limit across fixtures and golf so the homepage
-// does not send a large burst of requests to ESPN at the same time.
-const ESPN_MAX_CONCURRENT_REQUESTS = 6;
+// Limit concurrent ESPN requests to 10.
+const ESPN_MAX_CONCURRENT_REQUESTS = 10;
+
+// Per-request timeout: if ESPN doesn't answer in 6s, give up.
+const ESPN_REQUEST_TIMEOUT_MS = 6000;
+
+// Per-sport budget: even if every request hangs, the sport returns
+// partial data after this many ms so the page can render.
+const SPORT_TIMEOUT_MS = 15000;
+
+// Some networks / CDNs block Node's default undici User-Agent.
+// Pretend to be a normal browser.
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Chrome/120.0.0.0 Safari/537.36";
+// --- In-memory cache (60s TTL) ---
+// Prevents re-fetching ESPN on every page load.
+const fixturesCache = new Map<string, { data: any; expires: number }>();
+
+async function withCache<T>(
+  key: string,
+  ttlMs: number,
+  fn: () => Promise<T>
+): Promise<T> {
+  const hit = fixturesCache.get(key);
+  if (hit && hit.expires > Date.now()) {
+    return hit.data as T;
+  }
+  const data = await fn();
+  fixturesCache.set(key, { data, expires: Date.now() + ttlMs });
+  return data;
+}
+// --- End cache helper ---
+
+
 let activeEspnRequests = 0;
 const waitingEspnRequests: Array<() => void> = [];
 
@@ -287,16 +319,18 @@ async function fetchLeague(
   const url =
     `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?${params.toString()}`;
 
-  const res = await withEspnRequest(() => fetch(url, {
-    headers: {
-      Accept: "application/json",
-    },
-    next: {
-      revalidate: 60,
-    },
-    // Limit each active ESPN request to 8 seconds.
-    signal: AbortSignal.timeout(8000),
-  }));
+  const res = await withEspnRequest(() =>
+    fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": BROWSER_UA,
+      },
+      next: {
+        revalidate: 60,
+      },
+      signal: AbortSignal.timeout(ESPN_REQUEST_TIMEOUT_MS),
+    })
+  );
 
   if (!res.ok) {
     console.error(
@@ -339,6 +373,122 @@ async function fetchLeague(
         comp.date ?? ev.date
       );
 
+      const { status, detail } = readStatus(ev, comp);
+
+      fixtures.push({
+        id: `${cfg.sport}:${cfg.slug}:${ev.id}:${comp.id ?? ""}`,
+        eventId: String(ev.id),
+        sport: cfg.sport,
+        sportLabel: SPORT_LABELS[cfg.sport],
+        leagueId: cfg.leagueId,
+        leagueName: cfg.name,
+        leagueSlug: cfg.slug,
+        startTime,
+        status,
+        statusDetail: detail,
+        home: pickTeam(competitors, "home"),
+        away: pickTeam(competitors, "away"),
+        espnBroadcasts: compBroadcasts,
+      });
+    }
+  }
+
+  return fixtures;
+}
+
+/**
+ * Fetch a whole sport's scoreboard for one date and map events back to
+ * the correct league config. This replaces one-fetch-per-league with
+ * one-fetch-per-sport, dramatically reducing the number of requests.
+ *
+ * Sports that require a league-specific URL (NCAAB with groups=50,
+ * tennis which has separate ATP/WTA configs under the same espnSport)
+ * fall back to per-league fetching.
+ */
+const SPORT_LEVEL_FETCH: Partial<Record<SportKey, boolean>> = {
+  // Soccer uses individual league scoreboards because the sport-wide
+  // ESPN soccer scoreboard endpoint returns 404.
+  basketball: true,
+  football: true,
+  baseball: true,
+  hockey: true,
+  mma: true,
+  rugby: true,
+  // ncaab uses groups=50, tennis needs per-league handling
+};
+
+async function fetchSport(
+  sport: SportKey,
+  dateRange: string
+): Promise<Fixture[]> {
+  const configs = leaguesForSport(sport);
+  if (configs.length === 0) return [];
+
+  // Fall back to per-league for sports that need it
+  if (!SPORT_LEVEL_FETCH[sport]) {
+    const results = await Promise.allSettled(
+      configs.map((cfg) => fetchLeague(cfg, dateRange))
+    );
+    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  }
+
+  const espnSport = configs[0].espnSport;
+  const params = new URLSearchParams({
+    dates: dateRange,
+    limit: "500",
+  });
+
+  const url = `${ESPN_BASE}/${espnSport}/scoreboard?${params.toString()}`;
+
+  const res = await withEspnRequest(() =>
+    fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": BROWSER_UA,
+      },
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(ESPN_REQUEST_TIMEOUT_MS),
+    })
+  );
+
+  if (!res.ok) {
+    console.error(`ESPN ${espnSport} (sport-level) returned ${res.status}`);
+    return [];
+  }
+
+  const data = await res.json();
+  const events: any[] = data.events ?? [];
+  const fixtures: Fixture[] = [];
+
+  for (const ev of events) {
+    // Match this event to the correct league config.
+    // ESPN puts league info in ev.league?.slug for sport-level scoreboards.
+    const eventLeagueSlug: string =
+      ev.league?.slug ??
+      ev.competitions?.[0]?.league?.slug ??
+      ev.season?.slug ??
+      "";
+
+    const cfg =
+      configs.find((c) => c.slug === eventLeagueSlug) ??
+      configs[0]; // fallback: attribute to first config
+
+    const competitions: any[] = ev.groupings
+      ? ev.groupings.flatMap((g: any) => g.competitions ?? [])
+      : ev.competitions ?? [];
+
+    for (const comp of competitions) {
+      const competitors = comp.competitors ?? [];
+      if (competitors.length === 0) continue;
+
+      const compBroadcasts: BroadcasterHint[] = (comp.broadcasts ?? []).map(
+        (b: any) => ({
+          name: b.media?.shortName ?? b.media?.name ?? "",
+          market: b.market?.type ?? "",
+        })
+      );
+
+      const startTime = toUtcIso(comp.date ?? ev.date);
       const { status, detail } = readStatus(ev, comp);
 
       fixtures.push({
@@ -429,6 +579,9 @@ function sortFixtures(fixtures: Fixture[]): Fixture[] {
  * Fetch fixtures for a sport across yesterday and today.
  * Separate single-day ESPN requests are made for yesterday and today.
  * Duplicate fixtures are removed using their unique IDs.
+ *
+ * The whole sport fetch is capped at SPORT_TIMEOUT_MS so a slow
+ * ESPN response for one league can't block the homepage forever.
  */
 export async function getFixturesForSport(
   sport: SportKey
@@ -437,48 +590,60 @@ export async function getFixturesForSport(
     return [];
   }
 
-  const configs = leaguesForSport(sport);
+  return withCache(`fixtures:${sport}`, 60_000, async () => {
+    const configs = leaguesForSport(sport);
 
-  if (configs.length === 0) {
-    return [];
-  }
-
-  // ESPN's scoreboard endpoint currently rejects date ranges with HTTP 400.
-  // Fetch each day separately to preserve yesterday-and-today coverage.
-  const dates = scoreboardDates();
-
-  const results = await Promise.allSettled(
-    configs.flatMap((cfg) =>
-      dates.map((date) => fetchLeague(cfg, date))
-    )
-  );
-
-  const fixtures: Fixture[] = [];
-
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      fixtures.push(
-        ...r.value.filter(isDisplayable)
-      );
-    } else {
-      console.error(
-        "League fetch rejected:",
-        r.reason
-      );
+    if (configs.length === 0) {
+      return [];
     }
-  }
 
-  // Remove duplicate events returned by multiple date requests.
-  const uniqueFixtures = [
-    ...new Map(
-      fixtures.map((fixture) => [
-        fixture.id,
-        fixture,
-      ])
-    ).values(),
-  ];
+    const dates = scoreboardDates();
 
-  return sortFixtures(uniqueFixtures);
+    // Keep results from each date as soon as that date finishes.
+    const partialFixtures: Fixture[] = [];
+
+    const fetchPromise: Promise<Fixture[]> = Promise.allSettled(
+      dates.map(async (date) => {
+        const dateFixtures = await fetchSport(sport, date);
+        partialFixtures.push(...dateFixtures.filter(isDisplayable));
+      })
+    ).then((results) => {
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.error(`Date fetch rejected for ${sport}:`, result.reason);
+        }
+      }
+
+      return partialFixtures;
+    });
+
+    // If the sport exceeds its time budget, return dates that have completed.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const timeoutPromise: Promise<Fixture[]> = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        console.warn(
+          `Sport ${sport} exceeded ${SPORT_TIMEOUT_MS}ms - returning partial results`
+        );
+        resolve([...partialFixtures]);
+      }, SPORT_TIMEOUT_MS);
+    });
+
+    const fixtures = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+
+    // Remove duplicate events returned by multiple date requests.
+    const uniqueFixtures = [
+      ...new Map(
+        fixtures.map((fixture) => [fixture.id, fixture])
+      ).values(),
+    ];
+
+    return sortFixtures(uniqueFixtures);
+  });
 }
 
 /**
@@ -525,8 +690,9 @@ export async function getAllFixtures(): Promise<Fixture[]> {
 export async function getGolfTournaments(): Promise<
   GolfTournament[]
 > {
-  const configs = leaguesForSport("golf");
-  const date = todayParam();
+  return withCache("golf:today", 60_000, async () => {
+    const configs = leaguesForSport("golf");
+    const date = todayParam();
 
   const results = await Promise.allSettled(
     configs.map(
@@ -540,16 +706,18 @@ export async function getGolfTournaments(): Promise<
           `${ESPN_BASE}/${cfg.espnSport}/${cfg.slug}/scoreboard?${params.toString()}`;
 
         try {
-          const res = await withEspnRequest(() => fetch(url, {
-            headers: {
-              Accept: "application/json",
-            },
-            next: {
-              revalidate: 60,
-            },
-            // Golf shares the global ESPN request limit with other sports.
-            signal: AbortSignal.timeout(8000),
-          }));
+          const res = await withEspnRequest(() =>
+            fetch(url, {
+              headers: {
+                Accept: "application/json",
+                "User-Agent": BROWSER_UA,
+              },
+              next: {
+                revalidate: 60,
+              },
+              signal: AbortSignal.timeout(ESPN_REQUEST_TIMEOUT_MS),
+            })
+          );
 
           if (!res.ok) {
             return [];
@@ -637,14 +805,15 @@ export async function getGolfTournaments(): Promise<
     }
   }
 
-  return [
-    ...new Map(
-      all.map((tournament) => [
-        tournament.id,
-        tournament,
-      ])
-    ).values(),
-  ];
+    return [
+      ...new Map(
+        all.map((tournament) => [
+          tournament.id,
+          tournament,
+        ])
+      ).values(),
+    ];
+  });
 }
 
 export { LEAGUES };

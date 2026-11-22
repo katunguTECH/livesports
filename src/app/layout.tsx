@@ -2,10 +2,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
+
+const GA_ID = "G-T62SH96D1S";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,7 +64,21 @@ export default function RootLayout({
         <Header />
         <div className="flex-1">{children}</div>
         <Footer />
-        <GoogleAnalytics gaId="G-T62SH96D1S" />
+
+        {/* Google Analytics */}
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){window.dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', '${GA_ID}');
+          `}
+        </Script>
       </body>
     </html>
   );
