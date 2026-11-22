@@ -94,6 +94,11 @@ export default function TournamentCard({ tournament }: Props) {
                 href={b.affiliateUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-track="broadcaster"
+                data-label={b.name}
+                data-country={b.countryCode}
+                data-match={name}
+                data-league={leagueName}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground-muted transition-colors hover:border-primary/20 hover:bg-chip hover:text-chip-foreground"
                 title={`${b.name} (${b.countryCode})`}
               >

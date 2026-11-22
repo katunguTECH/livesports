@@ -1,12 +1,11 @@
-import { getPrisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+﻿import { getPrisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export default async function AdminDashboard() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("admin_auth")?.value !== "true") redirect("/admin/login");
+  await requireAdmin();
 
   const prisma = getPrisma();
+
   const [broadcasterCount, mappingCount] = await Promise.all([
     prisma.broadcaster.count(),
     prisma.leagueBroadcasterMapping.count(),

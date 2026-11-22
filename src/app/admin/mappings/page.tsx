@@ -1,6 +1,5 @@
-import { getPrisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+﻿import { getPrisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/admin-auth";
 import { addMappingAction, deleteMappingAction } from "../actions";
 
 export default async function MappingsPage({
@@ -9,8 +8,7 @@ export default async function MappingsPage({
   searchParams: Promise<{ error?: string; added?: string }>;
 }) {
   const params = await searchParams;
-  const cookieStore = await cookies();
-  if (cookieStore.get("admin_auth")?.value !== "true") redirect("/admin/login");
+  await requireAdmin();
 
   const prisma = getPrisma();
   const [mappings, broadcasters] = await Promise.all([
@@ -131,3 +129,5 @@ export default async function MappingsPage({
     </div>
   );
 }
+
+

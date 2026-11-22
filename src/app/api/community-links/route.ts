@@ -1,6 +1,7 @@
-
+﻿
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,12 @@ export async function GET(request: NextRequest) {
 
 // Submit and immediately publish a community viewing link.
 export async function POST(request: NextRequest) {
+  if (!(await isAdminAuthenticated())) {
+    return NextResponse.json(
+      { error: "Unauthorized. Administrator login required." },
+      { status: 401 }
+    );
+  }
   try {
     const body = await request.json();
 
@@ -164,3 +171,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

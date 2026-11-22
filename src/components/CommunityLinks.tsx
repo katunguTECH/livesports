@@ -160,6 +160,11 @@ export default function CommunityLinks({
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
+                data-track="community"
+                data-label={link.title || link.url}
+                data-match={`${fixture.home.shortName} vs ${fixture.away.shortName}`}
+                data-league={fixture.leagueName}
+                data-fixture={fixture.id}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
               >
                 Open link

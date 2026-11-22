@@ -149,6 +149,12 @@ export default function EventCard({
                 href={b.affiliateUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-track="broadcaster"
+                data-label={b.name}
+                data-country={b.countryCode}
+                data-match={`${home.shortName} vs ${away.shortName}`}
+                data-league={leagueName}
+                data-fixture={fixture.id}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground-muted hover:bg-chip"
               >
                 <span className="font-mono text-[9px] font-bold opacity-70">

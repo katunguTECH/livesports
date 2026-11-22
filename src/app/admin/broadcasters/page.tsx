@@ -1,11 +1,9 @@
-import { getPrisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+﻿import { getPrisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/admin-auth";
 import { addBroadcasterAction, deleteBroadcasterAction } from "../actions";
 
 export default async function BroadcastersPage() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("admin_auth")?.value !== "true") redirect("/admin/login");
+  await requireAdmin();
 
   const prisma = getPrisma();
   const broadcasters = await prisma.broadcaster.findMany({ orderBy: { name: "asc" } });
@@ -52,3 +50,5 @@ export default async function BroadcastersPage() {
     </div>
   );
 }
+
+

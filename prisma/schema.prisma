@@ -1,6 +1,5 @@
-
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
@@ -65,4 +64,73 @@ model CommunityLinkReport {
   link      CommunityLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
 
   @@index([linkId, createdAt])
+}
+
+// ---------- Analytics ----------
+
+model SiteVisit {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  ip        String
+  country   String?
+  city      String?
+  region    String?
+  userAgent String?
+  path      String
+  referrer  String?
+
+  @@index([createdAt])
+  @@index([country])
+  @@index([ip])
+}
+
+model LinkClick {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  ip        String
+  country   String?
+  city      String?
+  fixtureId String?
+  linkUrl   String
+  linkTitle String?
+  userAgent String?
+
+  @@index([createdAt])
+  @@index([fixtureId])
+  @@index([ip])
+}
+
+model PageVisit {
+  id        Int      @id @default(autoincrement())
+  path      String
+  referrer  String?
+  ip        String?
+  country   String?
+  city      String?
+  region    String?
+  userAgent String?
+  visitorId String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([country])
+}
+
+model ClickEvent {
+  id                 Int      @id @default(autoincrement())
+  kind               String
+  label              String
+  url                String
+  match              String?
+  leagueName         String?
+  fixtureId          String?
+  broadcasterCountry String?
+  ip                 String?
+  country            String?
+  city               String?
+  visitorId          String?
+  createdAt          DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([kind, label])
 }

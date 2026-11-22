@@ -1,0 +1,101 @@
+﻿generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CommunityLinkStatus {
+  PENDING
+  PUBLISHED
+  REMOVED
+}
+
+model Broadcaster {
+  id           Int                       @id @default(autoincrement())
+  name         String
+  logoUrl      String?
+  affiliateUrl String
+  mappings     LeagueBroadcasterMapping[]
+  createdAt    DateTime                  @default(now())
+}
+
+model LeagueBroadcasterMapping {
+  id            Int         @id @default(autoincrement())
+  sport         String
+  leagueId      Int
+  leagueName    String
+  countryCode   String
+  directUrl     String?
+  broadcaster   Broadcaster @relation(fields: [broadcasterId], references: [id], onDelete: Cascade)
+  broadcasterId Int
+  createdAt     DateTime    @default(now())
+
+  @@unique([sport, leagueId, countryCode])
+  @@index([sport, countryCode])
+}
+
+model CommunityLink {
+  id                Int                 @id @default(autoincrement())
+  fixtureId         String
+  sport             String
+  leagueName        String
+  homeName          String
+  awayName          String
+  title             String?
+  url               String
+  submittedByUserId String?
+  status            CommunityLinkStatus @default(PENDING)
+  createdAt         DateTime            @default(now())
+  reports           CommunityLinkReport[]
+
+  @@unique([fixtureId, url])
+  @@index([fixtureId, status, createdAt])
+}
+
+model CommunityLinkReport {
+  id        Int           @id @default(autoincrement())
+  linkId    Int
+  reason    String
+  details   String?
+  createdAt DateTime      @default(now())
+  link      CommunityLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, createdAt])
+}
+
+// ---------- Analytics ----------
+
+model SiteVisit {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  ip        String
+  country   String?
+  city      String?
+  region    String?
+  userAgent String?
+  path      String
+  referrer  String?
+
+  @@index([createdAt])
+  @@index([country])
+  @@index([ip])
+}
+
+model LinkClick {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  ip        String
+  country   String?
+  city      String?
+  fixtureId String?
+  linkUrl   String
+  linkTitle String?
+  userAgent String?
+
+  @@index([createdAt])
+  @@index([fixtureId])
+  @@index([ip])
+}
