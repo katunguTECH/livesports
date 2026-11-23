@@ -26,8 +26,8 @@ const BROWSER_UA =
   "AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/120.0.0.0 Safari/537.36";
 // --- Cache: serves stale data instantly and refreshes in the background ---
-const fixturesCache = new Map<string, { data: any; fresh: number }>();
-const inflight = new Map<string, Promise<any>>();
+const g = globalThis as any; const fixturesCache: Map<string, { data: any; fresh: number }> = (g.__fixturesCache ??= new Map());
+const inflight: Map<string, Promise<any>> = (g.__fixturesInflight ??= new Map());
 
 function refresh<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   let p = inflight.get(key);
