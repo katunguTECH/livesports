@@ -1,4 +1,4 @@
-﻿import {
+import {
   LEAGUES,
   leaguesForSport,
   type LeagueConfig,
@@ -25,9 +25,23 @@ const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/120.0.0.0 Safari/537.36";
-// --- In-memory cache (60s TTL) ---
-// Prevents re-fetching ESPN on every page load.
-const fixturesCache = new Map<string, { data: any; expires: number }>();
+// --- Cache: serves stale data instantly and refreshes in the background ---
+const fixturesCache = new Map<string, { data: any; fresh: number }>();
+const inflight = new Map<string, Promise<any>>();
+
+function refresh<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  let p = inflight.get(key);
+  if (!p) {
+    p = fn()
+      .then((data) => {
+        fixturesCache.set(key, { data, fresh: Date.now() + ttlMs });
+        return data;
+      })
+      .finally(() => inflight.delete(key));
+    inflight.set(key, p);
+  }
+  return p as Promise<T>;
+}
 
 async function withCache<T>(
   key: string,
@@ -35,12 +49,12 @@ async function withCache<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   const hit = fixturesCache.get(key);
-  if (hit && hit.expires > Date.now()) {
+  if (hit && hit.fresh > Date.now()) return hit.data as T;
+  if (hit) {
+    refresh(key, ttlMs, fn).catch(console.error);
     return hit.data as T;
   }
-  const data = await fn();
-  fixturesCache.set(key, { data, expires: Date.now() + ttlMs });
-  return data;
+  return refresh(key, ttlMs, fn);
 }
 // --- End cache helper ---
 
@@ -614,7 +628,7 @@ export async function getFixturesForSport(
       return [];
     }
 
-    const dates = scoreboardDates();
+    const dates = [scoreboardDates().join("-")];
 
     // Keep results from each date as soon as that date finishes.
     const partialFixtures: Fixture[] = [];
