@@ -628,7 +628,7 @@ export async function getFixturesForSport(
       return [];
     }
 
-    const dates = [scoreboardDates().join("-")];
+    const dates = scoreboardDates();
 
     // Keep results from each date as soon as that date finishes.
     const partialFixtures: Fixture[] = [];
