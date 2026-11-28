@@ -22,7 +22,7 @@ export default function LocalTime({
 
   useEffect(() => {
     try {
-      setText(new Date(iso).toLocaleString(undefined, FORMAT));
+      setText(new Date(iso).toLocaleString("en-GB", FORMAT));
     } catch {
       setText(fallback ?? iso);
     }

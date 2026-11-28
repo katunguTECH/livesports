@@ -22,7 +22,7 @@ export default function TournamentCard({ tournament }: Props) {
   const isFinished = status === "finished";
 
   return (
-    <article className="group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface p-5 transition-all hover:border-border-strong hover:shadow-sm">
+    <article className="event-card group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface p-5 transition-all hover:border-border-strong hover:shadow-sm">
       <div>
         <div className="mb-3 flex items-start justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-subtle">

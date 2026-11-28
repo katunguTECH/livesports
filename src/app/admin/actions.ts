@@ -9,6 +9,8 @@ import {
   destroyAdminSession,
   requireAdmin,
 } from "@/lib/admin-auth";
+import { invalidate } from "@/lib/swr";
+import { MAPPINGS_KEY } from "@/lib/broadcaster-matcher";
 
 export async function loginAction(formData: FormData) {
   const provided = String(formData.get("password") ?? "").trim();
@@ -39,6 +41,7 @@ export async function addBroadcasterAction(formData: FormData) {
     },
   });
 
+  invalidate(MAPPINGS_KEY);
   revalidatePath("/admin/broadcasters");
 }
 
@@ -51,6 +54,7 @@ export async function deleteBroadcasterAction(formData: FormData) {
     where: { id: Number(formData.get("id")) },
   });
 
+  invalidate(MAPPINGS_KEY);
   revalidatePath("/admin/broadcasters");
 }
 
@@ -80,6 +84,7 @@ export async function addMappingAction(formData: FormData) {
     redirect("/admin/mappings?error=" + encodeURIComponent(msg.slice(0, 100)));
   }
 
+  invalidate(MAPPINGS_KEY);
   revalidatePath("/admin/mappings");
   redirect("/admin/mappings?added=1");
 }
@@ -93,5 +98,6 @@ export async function deleteMappingAction(formData: FormData) {
     where: { id: Number(formData.get("id")) },
   });
 
+  invalidate(MAPPINGS_KEY);
   revalidatePath("/admin/mappings");
 }

@@ -1,6 +1,18 @@
 // src/lib/broadcaster-matcher.ts
 import { getPrisma } from "./prisma";
+import { swr } from "./swr";
 import type { Fixture } from "./api";
+
+export const MAPPINGS_KEY = "broadcaster-mappings";
+
+/** The whole mapping table is small, so load it once and reuse it. */
+export function getAllMappings() {
+  return swr(MAPPINGS_KEY, 5 * 60_000, () =>
+    getPrisma().leagueBroadcasterMapping.findMany({
+      include: { broadcaster: true },
+    })
+  );
+}
 
 export interface MatchedBroadcaster {
   countryCode: string;
@@ -68,19 +80,9 @@ export async function getBroadcastersForFixtures(
   const out = new Map<string, MatchedBroadcaster[]>();
   if (fixtures.length === 0) return out;
 
-  const sports = Array.from(new Set(fixtures.map((f) => dbSport(f.sport))));
-  const leagueIds = Array.from(new Set(fixtures.map((f) => f.leagueId)));
-
   let allMappings: any[] = [];
   try {
-    const prisma = getPrisma();
-    allMappings = await prisma.leagueBroadcasterMapping.findMany({
-      where: {
-        sport: { in: sports },
-        leagueId: { in: leagueIds },
-      },
-      include: { broadcaster: true },
-    });
+    allMappings = await getAllMappings();
   } catch (err) {
     console.error("Batch DB lookup failed:", err);
   }

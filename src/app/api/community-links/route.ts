@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { invalidate } from "@/lib/swr";
+import { COMMUNITY_LINKS_KEY } from "@/lib/community-links";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -142,6 +144,8 @@ export async function POST(request: NextRequest) {
         createdAt: true,
       },
     });
+
+    invalidate(COMMUNITY_LINKS_KEY);
 
     return NextResponse.json(
       {

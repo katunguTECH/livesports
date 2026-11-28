@@ -53,3 +53,8 @@ body {
   background: var(--color-primary);
   color: var(--color-primary-foreground);
 }
+/* Skip layout and painting for cards that are off screen. */
+.event-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
+}

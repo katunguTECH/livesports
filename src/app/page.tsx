@@ -1,7 +1,6 @@
 
 import { headers } from "next/headers";
-import { Suspense } from "react";
-import { getPrisma } from "@/lib/prisma";
+import { cache, Suspense } from "react";
 import {
   getAllFixtures,
   getFixturesForSport,
@@ -11,13 +10,15 @@ import {
   getBroadcastersForFixtures,
   type MatchedBroadcaster,
 } from "@/lib/broadcaster-matcher";
+import {
+  getPublishedLinks,
+  type PublishedLink,
+} from "@/lib/community-links";
 import EventCard from "@/components/EventCard";
 import TournamentCard from "@/components/TournamentCard";
 import RegionSelector from "@/components/RegionSelector";
 import SportTabs from "@/components/SportTabs";
 import type { SportKey, SportTabKey } from "@/lib/leagues";
-
-export const revalidate = 60;
 
 const VALID_SPORTS: SportKey[] = [
   "soccer",
@@ -31,15 +32,6 @@ const VALID_SPORTS: SportKey[] = [
   "golf",
   "rugby",
 ];
-
-type CommunityLinkForCard = {
-  id: number;
-  fixtureId: string;
-  title: string | null;
-  url: string;
-  status: string;
-  createdAt: string;
-};
 
 type FixtureWithBroadcasters = Awaited<
   ReturnType<typeof getFixturesForSport>
@@ -182,37 +174,8 @@ function StatLine({
   );
 }
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    region?: string;
-    sport?: string;
-  }>;
-}) {
-  const params = await searchParams;
-  const headersList = await headers();
-
-  let detectedCountry =
-    headersList.get("x-nf-request-country") ||
-    headersList.get("cf-ipcountry") ||
-    headersList.get("x-vercel-ip-country");
-
-  detectedCountry = detectedCountry || "US";
-
-  const countryCode = (
-    params.region ?? detectedCountry
-  ).toUpperCase();
-
-  const requestedSport = params.sport;
-
-  const sport: SportTabKey =
-    requestedSport === "all"
-      ? "all"
-      : VALID_SPORTS.includes(requestedSport as SportKey)
-        ? (requestedSport as SportKey)
-        : "all";
-
+// Shared by the event count and the event list, so it runs once per request.
+const loadEvents = cache(async (sport: SportTabKey, countryCode: string) => {
   let dataError: string | null = null;
 
   let fixturesWithBroadcasters: FixtureWithBroadcasters[] = [];
@@ -276,6 +239,57 @@ export default async function HomePage({
     console.error("Fixture fetch failed:", err);
   }
 
+  return {
+    dataError,
+    fixturesWithBroadcasters,
+    tournaments,
+    totalFetched,
+  };
+});
+
+type EventsProps = { sport: SportTabKey; countryCode: string };
+
+async function EventCount({ sport, countryCode }: EventsProps) {
+  const { tournaments, totalFetched } = await loadEvents(sport, countryCode);
+  const isGolfOnly = sport === "golf";
+
+  return (
+    <StatLine
+      label={
+        isGolfOnly
+          ? "tournaments today"
+          : sport === "all"
+            ? "events and tournaments"
+            : "fixtures today"
+      }
+      count={
+        isGolfOnly ? tournaments.length : totalFetched + tournaments.length
+      }
+    />
+  );
+}
+
+function EventsSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading events"
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {Array.from({ length: 9 }, (_, i) => (
+        <div
+          key={i}
+          className="h-48 animate-pulse rounded-xl border border-border bg-surface"
+        />
+      ))}
+    </div>
+  );
+}
+
+async function Events({ sport, countryCode }: EventsProps) {
+  const { dataError, fixturesWithBroadcasters, tournaments } =
+    await loadEvents(sport, countryCode);
+
   const live = fixturesWithBroadcasters.filter(
     (f) => f.status === "live"
   );
@@ -311,101 +325,17 @@ export default async function HomePage({
   const hasNothing =
     !hasLive && !hasUpcoming && !hasFinished;
 
-  const isGolfOnly = sport === "golf";
-
-  const totalDisplayed =
-    totalFetched + tournaments.length;
-
-  // Load community links for all displayed fixtures in one query.
-  const displayedFixtures = [
-    ...live.slice(0, 30),
-    ...scheduled.slice(0, 60),
-    ...finished.slice(0, 30),
-  ];
-
-  const displayedFixtureIds = [
-    ...new Set(displayedFixtures.map((fixture) => fixture.id)),
-  ];
-
-  const communityLinksByFixture = new Map<
-    string,
-    CommunityLinkForCard[]
-  >();
+  // Community links come from a cache, so this rarely touches the database.
+  let communityLinksByFixture = new Map<string, PublishedLink[]>();
 
   try {
-    if (displayedFixtureIds.length > 0) {
-      const links = await getPrisma().communityLink.findMany({
-        where: {
-          fixtureId: {
-            in: displayedFixtureIds,
-          },
-          status: "PUBLISHED",
-        },
-        select: {
-          id: true,
-          fixtureId: true,
-          title: true,
-          url: true,
-          status: true,
-          createdAt: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      for (const link of links) {
-        const cardLink: CommunityLinkForCard = {
-          ...link,
-          createdAt: link.createdAt.toISOString(),
-        };
-
-        const existing =
-          communityLinksByFixture.get(link.fixtureId) ?? [];
-
-        existing.push(cardLink);
-        communityLinksByFixture.set(link.fixtureId, existing);
-      }
-    }
+    communityLinksByFixture = await getPublishedLinks();
   } catch (error) {
     console.error("Bulk community links retrieval failed:", error);
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <Hero
-        detectedCountry={detectedCountry}
-        showingCountry={countryCode}
-      />
-
-      <SportTabs
-        active={sport}
-        region={countryCode}
-      />
-
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3 border-y border-border py-3">
-        <Suspense
-          fallback={
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground-subtle">
-              Broadcasters for
-            </span>
-          }
-        >
-          <RegionSelector current={countryCode} />
-        </Suspense>
-
-        <StatLine
-          label={
-            isGolfOnly
-              ? "tournaments today"
-              : sport === "all"
-                ? "events and tournaments"
-                : "fixtures today"
-          }
-          count={isGolfOnly ? tournaments.length : totalDisplayed}
-        />
-      </div>
-
+    <>
       {dataError && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <strong className="font-semibold">
@@ -518,6 +448,79 @@ export default async function HomePage({
           )}
         </>
       )}
+    </>
+  );
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    region?: string;
+    sport?: string;
+  }>;
+}) {
+  const params = await searchParams;
+  const headersList = await headers();
+
+  let detectedCountry =
+    headersList.get("x-nf-request-country") ||
+    headersList.get("cf-ipcountry") ||
+    headersList.get("x-vercel-ip-country");
+
+  detectedCountry = detectedCountry || "US";
+
+  const countryCode = (
+    params.region ?? detectedCountry
+  ).toUpperCase();
+
+  const requestedSport = params.sport;
+
+  const sport: SportTabKey =
+    requestedSport === "all"
+      ? "all"
+      : VALID_SPORTS.includes(requestedSport as SportKey)
+        ? (requestedSport as SportKey)
+        : "all";
+
+  return (
+    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <Hero
+        detectedCountry={detectedCountry}
+        showingCountry={countryCode}
+      />
+
+      <SportTabs
+        active={sport}
+        region={countryCode}
+      />
+
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3 border-y border-border py-3">
+        <Suspense
+          fallback={
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground-subtle">
+              Broadcasters for
+            </span>
+          }
+        >
+          <RegionSelector current={countryCode} />
+        </Suspense>
+
+        <Suspense
+          key={`count-${sport}-${countryCode}`}
+          fallback={null}
+        >
+          <EventCount sport={sport} countryCode={countryCode} />
+        </Suspense>
+      </div>
+
+      {/* The page shell is sent at once; events stream in when ready. */}
+      <Suspense
+        key={`events-${sport}-${countryCode}`}
+        fallback={<EventsSkeleton />}
+      >
+        <Events sport={sport} countryCode={countryCode} />
+      </Suspense>
     </main>
   );
 }

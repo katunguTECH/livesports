@@ -9,8 +9,8 @@ const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Limit concurrent ESPN requests to 10.
-const ESPN_MAX_CONCURRENT_REQUESTS = 10;
+// Limit concurrent ESPN requests to 20.
+const ESPN_MAX_CONCURRENT_REQUESTS = 20;
 
 // Per-request timeout: if ESPN doesn't answer in 6s, give up.
 const ESPN_REQUEST_TIMEOUT_MS = 6000;

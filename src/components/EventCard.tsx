@@ -1,9 +1,8 @@
 
-"use client";
-
 import type { Fixture } from "@/lib/api";
 import type { MatchedBroadcaster } from "@/lib/broadcaster-matcher";
 import CommunityLinks from "@/components/CommunityLinks";
+import LocalTime from "@/components/LocalTime";
 
 type CommunityLink = {
   id: number;
@@ -67,34 +66,22 @@ export default function EventCard({
     return null;
   };
 
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
+  const startDate = new Date(startTime);
 
-    if (Number.isNaN(date.getTime())) {
-      return "Time unavailable";
-    }
-
-    const days = [
-      "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-    ];
-
-    const months = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-    ];
-
-    const dayName = days[date.getDay()];
-    const dayNum = date.getDate();
-    const monthName = months[date.getMonth()];
-
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-
-    return `${dayName} ${dayNum} ${monthName}, ${hours}:${minutes}`;
-  };
+  // Server-rendered fallback; LocalTime swaps in the visitor's own time zone.
+  const utcStart = Number.isNaN(startDate.getTime())
+    ? null
+    : `${startDate.toLocaleString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+      })} UTC`;
 
   return (
-    <article className="group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface p-5 transition-all hover:border-border-strong hover:shadow-sm">
+    <article className="event-card group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface p-5 transition-all hover:border-border-strong hover:shadow-sm">
       <div>
         <div className="mb-3 flex items-start justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-subtle">
@@ -135,7 +122,11 @@ export default function EventCard({
 
         {status === "scheduled" && (
           <p className="mt-3 text-xs font-medium text-foreground-muted">
-            {formatDate(startTime)}
+            {utcStart ? (
+              <LocalTime iso={startTime} fallback={utcStart} />
+            ) : (
+              "Time unavailable"
+            )}
           </p>
         )}
       </div>
@@ -171,8 +162,15 @@ export default function EventCard({
         )}
       </div>
 
+      {/* Only send the browser the fields this component uses. */}
       <CommunityLinks
-        fixture={fixture}
+        fixture={{
+          id: fixture.id,
+          sport: fixture.sport,
+          leagueName,
+          home: { shortName: home.shortName },
+          away: { shortName: away.shortName },
+        }}
         initialLinks={communityLinks}
       />
     </article>

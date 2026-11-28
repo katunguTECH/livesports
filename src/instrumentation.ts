@@ -1,7 +1,11 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { getAllFixtures, getGolfTournaments } = await import("./lib/api");
+  const { getAllMappings } = await import("./lib/broadcaster-matcher");
+  const { getPublishedLinks } = await import("./lib/community-links");
   const warm = () => {
+    getAllMappings().catch(console.error);
+    getPublishedLinks().catch(console.error);
     getAllFixtures().catch(console.error);
     getGolfTournaments().catch(console.error);
   };

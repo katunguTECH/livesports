@@ -5,7 +5,10 @@ import { useEffect, useState } from "react";
 import type { Fixture } from "@/lib/api";
 
 type Props = {
-  fixture: Fixture;
+  fixture: Pick<Fixture, "id" | "sport" | "leagueName"> & {
+    home: Pick<Fixture["home"], "shortName">;
+    away: Pick<Fixture["away"], "shortName">;
+  };
   initialLinks?: CommunityLink[];
 };
 
@@ -31,6 +34,8 @@ export default function CommunityLinks({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  // The form is only built when asked for, which keeps 100+ cards light.
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     if (initialLinks !== undefined) {
@@ -124,6 +129,18 @@ export default function CommunityLinks({
     }
   }
 
+  if (!showForm && !loading && !error && links.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => setShowForm(true)}
+        className="mt-4 w-full border-t border-border pt-3 text-xs font-semibold text-foreground-muted hover:text-foreground"
+      >
+        Submit a viewing link
+      </button>
+    );
+  }
+
   return (
     <section className="mt-4 border-t border-border pt-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -178,34 +195,44 @@ export default function CommunityLinks({
         </p>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-2">
-        <input
-          type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          maxLength={100}
-          placeholder="Link title (optional)"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground"
-        />
-
-        <input
-          type="url"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          maxLength={2048}
-          required
-          placeholder="Paste a viewing link (https://...)"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground"
-        />
-
+      {!showForm ? (
         <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-chip disabled:opacity-50"
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="w-full rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-chip"
         >
-          {submitting ? "Submitting..." : "Submit a Viewing Link"}
+          Submit a viewing link
         </button>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-2">
+          <input
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={100}
+            placeholder="Link title (optional)"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground"
+          />
+
+          <input
+            type="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            maxLength={2048}
+            required
+            placeholder="Paste a viewing link (https://...)"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground"
+          />
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-md border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-chip disabled:opacity-50"
+          >
+            {submitting ? "Submitting..." : "Submit a Viewing Link"}
+          </button>
+        </form>
+      )}
 
       {message && (
         <p className="mt-2 text-xs text-green-600">{message}</p>
