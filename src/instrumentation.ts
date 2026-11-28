@@ -7,4 +7,10 @@ export async function register() {
   };
   warm();
   setInterval(warm, 65_000);
+
+  // Keep the Neon compute awake (it suspends after ~5 minutes idle)
+  const { getPrisma } = await import("./lib/prisma");
+  const ping = () => getPrisma().$queryRaw`SELECT 1`.catch(console.error);
+  ping();
+  setInterval(ping, 4 * 60_000);
 }
